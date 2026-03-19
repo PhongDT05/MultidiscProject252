@@ -238,6 +238,37 @@ else → "critical" (red)
 
 **Purpose**: In-depth view of a single lab room
 
+---
+
+## Consolidated Functional Notes
+
+The following sections consolidate previously separate documentation for use cases and manager lab assignments.
+
+### Use Cases Summary
+
+- UC1 Threshold Configuration: Admin-configurable thresholds per room.
+- UC2 Real-time Monitoring: Dashboard and room views with live environmental metrics.
+- UC3 Hazard Response and Alerting: Severity-based alerts and automated actuator triggers.
+- UC4 Energy Saving: Presence-based auto-off behavior for non-essential equipment.
+- UC5 Manual Override: Technician+ manual control with mode switching.
+- UC6 Reports and History: Change logs, trends, and filterable event history.
+- UC7 Authentication and Roles: Role-based route and feature access.
+- UC8 Device Health: IoT health, connectivity, and diagnostics monitoring.
+
+### Manager Lab Assignment
+
+Managers can be restricted to specific labs through an `assignedLabs` list on user records.
+
+- `manager@smartlab.com` manages labs 1-3.
+- `manager2@smartlab.com` manages labs 4-6.
+- Admin, Technician, and Viewer accounts are not lab-restricted by default.
+
+Access control behavior:
+
+- Dashboard data and lab cards are filtered by accessible labs.
+- Manager users receive a lab access summary banner.
+- Lab-level access checks are enforced through authentication context permission helpers.
+
 **Route Parameter**: `roomId` from URL (e.g., `/room/lab-01`)
 
 **Key Sections**:

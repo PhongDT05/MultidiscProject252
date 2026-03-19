@@ -1,11 +1,27 @@
 
-  # Smart Lab Dashboard (1)
+  # Smart Lab Dashboard
 
-  This is a code bundle for Smart Lab Dashboard (1). The original project is available at https://www.figma.com/design/VpU10n7jbq2ELNuf9BsgYl/Smart-Lab-Dashboard--1-.
+  Smart Lab Dashboard is a React + TypeScript application for monitoring and controlling laboratory environments with role-based access control.
 
-  ## Running the code
+  ## Run Locally
 
-  Run `npm i` to install the dependencies.
+  1. Install dependencies:
 
-  Run `npm run dev` to start the development server.
-  # MultidiscProject252
+    ```bash
+    npm i
+    ```
+
+  2. Start the dev server:
+
+    ```bash
+    npm run dev
+    ```
+
+  3. Open http://localhost:5173/
+
+  ## Documentation
+
+  - Quick start and demo accounts: [QUICK_START_GUIDE.md](QUICK_START_GUIDE.md)
+  - System architecture and module details: [SYSTEM_DOCUMENTATION.md](SYSTEM_DOCUMENTATION.md)
+  - Authentication and RBAC details: [RBAC_DOCUMENTATION.md](RBAC_DOCUMENTATION.md)
+  - Third-party attributions: [ATTRIBUTIONS.md](ATTRIBUTIONS.md)

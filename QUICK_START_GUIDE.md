@@ -88,3 +88,24 @@ Below are test accounts you can use to explore the system with different role-ba
 - Accounts and lab configurations are seeded on first run
 - Alerts, equipment settings, and user preferences update in real-time
 - Session information is preserved across page refreshes
+
+## Authentication Notes (Consolidated)
+
+This project uses a demo RBAC authentication flow with role hierarchy:
+
+- Admin: full access
+- Manager: lab and equipment management
+- Technician: equipment control and maintenance updates
+- Viewer: read-only access
+
+### RBAC Testing Flow
+
+1. Login as Viewer and verify read-only behavior.
+2. Login as Technician and verify control permissions.
+3. Login as Manager and verify management capabilities.
+4. Login as Admin and verify full access, including admin-only areas.
+
+### Security Note
+
+This is a demo implementation using localStorage and seeded credentials.
+For production, integrate secure server-side authentication and authorization.
