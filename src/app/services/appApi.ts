@@ -153,8 +153,10 @@ export const appApi = {
     ensureSeedData();
     await sleep();
     const parsed = parseJson<LabRoom[]>(localStorage.getItem(LABS_KEY));
-    if (!Array.isArray(parsed)) {
-      return normalizeLabs(cloneInitialLabs());
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      const fallbackLabs = normalizeLabs(cloneInitialLabs());
+      localStorage.setItem(LABS_KEY, JSON.stringify(fallbackLabs));
+      return fallbackLabs;
     }
 
     const normalized = normalizeLabs(parsed);

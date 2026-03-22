@@ -50,7 +50,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         ]);
 
         if (!isMounted) return;
-        setLabs(loadedLabs);
+        setLabs(loadedLabs.length > 0 ? loadedLabs : cloneInitialLabs());
         setUsers(loadedUsers);
       } catch {
         if (!isMounted) return;
