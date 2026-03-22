@@ -44,13 +44,12 @@ export function Root() {
 
   const handleLogout = () => {
     logout();
-    navigate('/login', { replace: true });
+    navigate('/', { replace: true });
   };
 
   const getRoleColor = (role: string) => {
     switch (role) {
       case 'admin': return 'bg-purple-100 text-purple-700';
-      case 'manager': return 'bg-blue-100 text-blue-700';
       case 'technician': return 'bg-green-100 text-green-700';
       case 'viewer': return 'bg-slate-100 text-slate-700';
       default: return 'bg-slate-100 text-slate-700';
@@ -184,6 +183,24 @@ export function Root() {
                       </div>
                     </>
                   )}
+                </div>
+              )}
+
+              {isMainDashboard && !user && (
+                <div className="flex items-center gap-3 pl-4 border-l border-slate-200">
+                  <div className="hidden sm:flex flex-col items-end">
+                    <div className="text-sm font-medium text-slate-900">Guest Mode</div>
+                    <div className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                      viewer access
+                    </div>
+                  </div>
+                  <Link
+                    to="/login"
+                    className="inline-flex items-center gap-2 px-3 py-2 text-sm text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors"
+                  >
+                    <User className="w-4 h-4" />
+                    Sign In
+                  </Link>
                 </div>
               )}
 

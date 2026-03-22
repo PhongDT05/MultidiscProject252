@@ -9,7 +9,6 @@ import {
   Shield, 
   ShieldAlert,
   ShieldCheck,
-  Eye,
   X,
   Save,
   Mail,
@@ -33,7 +32,7 @@ export function UserManagement() {
   const [newUser, setNewUser] = useState<Partial<UserData>>({
     name: '',
     email: '',
-    role: 'viewer',
+    role: 'technician',
     status: 'active'
   });
 
@@ -54,12 +53,10 @@ export function UserManagement() {
     switch (role) {
       case 'admin':
         return <ShieldCheck className="w-4 h-4 text-purple-600" />;
-      case 'manager':
-        return <Shield className="w-4 h-4 text-blue-600" />;
       case 'technician':
         return <ShieldAlert className="w-4 h-4 text-green-600" />;
       case 'viewer':
-        return <Eye className="w-4 h-4 text-slate-600" />;
+        return <Shield className="w-4 h-4 text-slate-600" />;
     }
   };
 
@@ -67,8 +64,6 @@ export function UserManagement() {
     switch (role) {
       case 'admin':
         return 'bg-purple-100 text-purple-800 border-purple-200';
-      case 'manager':
-        return 'bg-blue-100 text-blue-800 border-blue-200';
       case 'technician':
         return 'bg-green-100 text-green-800 border-green-200';
       case 'viewer':
@@ -116,7 +111,7 @@ export function UserManagement() {
     setNewUser({
       name: '',
       email: '',
-      role: 'viewer',
+      role: 'technician',
       status: 'active'
     });
     setShowAddUser(false);
@@ -124,9 +119,7 @@ export function UserManagement() {
 
   const roleStats = {
     admin: users.filter(u => u.role === 'admin').length,
-    manager: users.filter(u => u.role === 'manager').length,
     technician: users.filter(u => u.role === 'technician').length,
-    viewer: users.filter(u => u.role === 'viewer').length,
   };
 
   return (
@@ -161,7 +154,7 @@ export function UserManagement() {
       )}
 
       {/* Role Statistics */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
         <div className="bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200 rounded-lg p-4">
           <div className="flex items-center gap-3 mb-2">
             <ShieldCheck className="w-6 h-6 text-purple-600" />
@@ -170,28 +163,12 @@ export function UserManagement() {
           <p className="text-3xl font-bold text-purple-900">{roleStats.admin}</p>
         </div>
 
-        <div className="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-lg p-4">
-          <div className="flex items-center gap-3 mb-2">
-            <Shield className="w-6 h-6 text-blue-600" />
-            <h3 className="font-medium text-blue-900">Managers</h3>
-          </div>
-          <p className="text-3xl font-bold text-blue-900">{roleStats.manager}</p>
-        </div>
-
         <div className="bg-gradient-to-br from-green-50 to-green-100 border border-green-200 rounded-lg p-4">
           <div className="flex items-center gap-3 mb-2">
             <ShieldAlert className="w-6 h-6 text-green-600" />
             <h3 className="font-medium text-green-900">Technicians</h3>
           </div>
           <p className="text-3xl font-bold text-green-900">{roleStats.technician}</p>
-        </div>
-
-        <div className="bg-gradient-to-br from-slate-50 to-slate-100 border border-slate-200 rounded-lg p-4">
-          <div className="flex items-center gap-3 mb-2">
-            <Eye className="w-6 h-6 text-slate-600" />
-            <h3 className="font-medium text-slate-900">Viewers</h3>
-          </div>
-          <p className="text-3xl font-bold text-slate-900">{roleStats.viewer}</p>
         </div>
       </div>
 
@@ -244,9 +221,7 @@ export function UserManagement() {
                 onChange={(e) => setNewUser({ ...newUser, role: e.target.value as UserRole })}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="viewer">Viewer</option>
                 <option value="technician">Technician</option>
-                <option value="manager">Manager</option>
                 <option value="admin">Administrator</option>
               </select>
             </div>
@@ -426,9 +401,7 @@ export function UserManagement() {
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   disabled={editingUser.id === currentUser?.id}
                 >
-                  <option value="viewer">Viewer</option>
                   <option value="technician">Technician</option>
-                  <option value="manager">Manager</option>
                   <option value="admin">Administrator</option>
                 </select>
                 {editingUser.id === currentUser?.id && (

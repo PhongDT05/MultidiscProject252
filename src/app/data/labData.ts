@@ -22,6 +22,8 @@ export interface Equipment {
   lastMaintenance: string;
   mode: "auto" | "manual"; // For UC5 - Manual Override
   isEssential: boolean; // For UC4 - Energy Saving (essential devices stay on)
+  cumulativeRuntimeHours?: number;
+  lastRuntimeUpdateAt?: string;
 }
 
 // UC8 - IoT Device Health Monitoring
@@ -169,10 +171,10 @@ export const labRooms: LabRoom[] = [
     maxOccupancy: 20,
     presenceDetected: true,
     equipment: [
-      { id: "eq-01", name: "Fume Hood 1", status: "online", lastMaintenance: "2026-02-15", mode: "auto", isEssential: true },
-      { id: "eq-02", name: "Fume Hood 2", status: "online", lastMaintenance: "2026-02-15", mode: "auto", isEssential: true },
-      { id: "eq-03", name: "Centrifuge", status: "online", lastMaintenance: "2026-01-20", mode: "manual", isEssential: false },
-      { id: "eq-04", name: "Autoclave", status: "maintenance", lastMaintenance: "2026-02-10", mode: "manual", isEssential: false },
+      { id: "eq-01", name: "Fume Hood 1", status: "online", lastMaintenance: "2026-02-15", mode: "auto", isEssential: true, cumulativeRuntimeHours: 0, lastRuntimeUpdateAt: new Date().toISOString() },
+      { id: "eq-02", name: "Fume Hood 2", status: "online", lastMaintenance: "2026-02-15", mode: "auto", isEssential: true, cumulativeRuntimeHours: 0, lastRuntimeUpdateAt: new Date().toISOString() },
+      { id: "eq-03", name: "Centrifuge", status: "online", lastMaintenance: "2026-01-20", mode: "manual", isEssential: false, cumulativeRuntimeHours: 0, lastRuntimeUpdateAt: new Date().toISOString() },
+      { id: "eq-04", name: "Autoclave", status: "maintenance", lastMaintenance: "2026-02-10", mode: "manual", isEssential: false, cumulativeRuntimeHours: 0, lastRuntimeUpdateAt: new Date().toISOString() },
     ],
     alerts: [],
     iotDevices: [
@@ -200,10 +202,10 @@ export const labRooms: LabRoom[] = [
     maxOccupancy: 20,
     presenceDetected: true,
     equipment: [
-      { id: "eq-05", name: "Incubator 1", status: "online", lastMaintenance: "2026-02-01", mode: "auto", isEssential: true },
-      { id: "eq-06", name: "Incubator 2", status: "online", lastMaintenance: "2026-02-01", mode: "auto", isEssential: true },
-      { id: "eq-07", name: "PCR Machine", status: "online", lastMaintenance: "2026-01-25", mode: "manual", isEssential: false },
-      { id: "eq-08", name: "Microscope", status: "offline", lastMaintenance: "2026-01-10", mode: "manual", isEssential: false },
+      { id: "eq-05", name: "Incubator 1", status: "online", lastMaintenance: "2026-02-01", mode: "auto", isEssential: true, cumulativeRuntimeHours: 0, lastRuntimeUpdateAt: new Date().toISOString() },
+      { id: "eq-06", name: "Incubator 2", status: "online", lastMaintenance: "2026-02-01", mode: "auto", isEssential: true, cumulativeRuntimeHours: 0, lastRuntimeUpdateAt: new Date().toISOString() },
+      { id: "eq-07", name: "PCR Machine", status: "online", lastMaintenance: "2026-01-25", mode: "manual", isEssential: false, cumulativeRuntimeHours: 0, lastRuntimeUpdateAt: new Date().toISOString() },
+      { id: "eq-08", name: "Microscope", status: "offline", lastMaintenance: "2026-01-10", mode: "manual", isEssential: false, cumulativeRuntimeHours: 0, lastRuntimeUpdateAt: new Date().toISOString() },
     ],
     alerts: [
       {
@@ -255,9 +257,9 @@ export const labRooms: LabRoom[] = [
     maxOccupancy: 15,
     presenceDetected: true,
     equipment: [
-      { id: "eq-09", name: "Oscilloscope 1", status: "online", lastMaintenance: "2026-02-20", mode: "manual", isEssential: false },
-      { id: "eq-10", name: "Oscilloscope 2", status: "online", lastMaintenance: "2026-02-20", mode: "manual", isEssential: false },
-      { id: "eq-11", name: "Signal Generator", status: "online", lastMaintenance: "2026-02-18", mode: "manual", isEssential: false },
+      { id: "eq-09", name: "Oscilloscope 1", status: "online", lastMaintenance: "2026-02-20", mode: "manual", isEssential: false, cumulativeRuntimeHours: 0, lastRuntimeUpdateAt: new Date().toISOString() },
+      { id: "eq-10", name: "Oscilloscope 2", status: "online", lastMaintenance: "2026-02-20", mode: "manual", isEssential: false, cumulativeRuntimeHours: 0, lastRuntimeUpdateAt: new Date().toISOString() },
+      { id: "eq-11", name: "Signal Generator", status: "online", lastMaintenance: "2026-02-18", mode: "manual", isEssential: false, cumulativeRuntimeHours: 0, lastRuntimeUpdateAt: new Date().toISOString() },
     ],
     alerts: [],
     iotDevices: [
@@ -282,9 +284,9 @@ export const labRooms: LabRoom[] = [
     maxOccupancy: 20,
     presenceDetected: true,
     equipment: [
-      { id: "eq-12", name: "Server Rack 1", status: "online", lastMaintenance: "2026-02-10", mode: "auto", isEssential: true },
-      { id: "eq-13", name: "Server Rack 2", status: "online", lastMaintenance: "2026-02-10", mode: "auto", isEssential: true },
-      { id: "eq-14", name: "HVAC System", status: "maintenance", lastMaintenance: "2026-02-25", mode: "manual", isEssential: true },
+      { id: "eq-12", name: "Server Rack 1", status: "online", lastMaintenance: "2026-02-10", mode: "auto", isEssential: true, cumulativeRuntimeHours: 0, lastRuntimeUpdateAt: new Date().toISOString() },
+      { id: "eq-13", name: "Server Rack 2", status: "online", lastMaintenance: "2026-02-10", mode: "auto", isEssential: true, cumulativeRuntimeHours: 0, lastRuntimeUpdateAt: new Date().toISOString() },
+      { id: "eq-14", name: "HVAC System", status: "maintenance", lastMaintenance: "2026-02-25", mode: "manual", isEssential: true, cumulativeRuntimeHours: 0, lastRuntimeUpdateAt: new Date().toISOString() },
     ],
     alerts: [
       {
@@ -334,8 +336,8 @@ export const labRooms: LabRoom[] = [
     maxOccupancy: 10,
     presenceDetected: true,
     equipment: [
-      { id: "eq-15", name: "Spectrometer", status: "online", lastMaintenance: "2026-02-22", mode: "manual", isEssential: true },
-      { id: "eq-16", name: "Chromatograph", status: "online", lastMaintenance: "2026-02-20", mode: "manual", isEssential: true },
+      { id: "eq-15", name: "Spectrometer", status: "online", lastMaintenance: "2026-02-22", mode: "manual", isEssential: true, cumulativeRuntimeHours: 0, lastRuntimeUpdateAt: new Date().toISOString() },
+      { id: "eq-16", name: "Chromatograph", status: "online", lastMaintenance: "2026-02-20", mode: "manual", isEssential: true, cumulativeRuntimeHours: 0, lastRuntimeUpdateAt: new Date().toISOString() },
     ],
     alerts: [],
     iotDevices: [
@@ -360,10 +362,10 @@ export const labRooms: LabRoom[] = [
     maxOccupancy: 18,
     presenceDetected: true,
     equipment: [
-      { id: "eq-17", name: "3D Printer 1", status: "online", lastMaintenance: "2026-02-12", mode: "manual", isEssential: false },
-      { id: "eq-18", name: "3D Printer 2", status: "online", lastMaintenance: "2026-02-12", mode: "manual", isEssential: false },
-      { id: "eq-19", name: "CNC Machine", status: "maintenance", lastMaintenance: "2026-02-08", mode: "manual", isEssential: false },
-      { id: "eq-20", name: "Laser Cutter", status: "online", lastMaintenance: "2026-02-15", mode: "manual", isEssential: false },
+      { id: "eq-17", name: "3D Printer 1", status: "online", lastMaintenance: "2026-02-12", mode: "manual", isEssential: false, cumulativeRuntimeHours: 0, lastRuntimeUpdateAt: new Date().toISOString() },
+      { id: "eq-18", name: "3D Printer 2", status: "online", lastMaintenance: "2026-02-12", mode: "manual", isEssential: false, cumulativeRuntimeHours: 0, lastRuntimeUpdateAt: new Date().toISOString() },
+      { id: "eq-19", name: "CNC Machine", status: "maintenance", lastMaintenance: "2026-02-08", mode: "manual", isEssential: false, cumulativeRuntimeHours: 0, lastRuntimeUpdateAt: new Date().toISOString() },
+      { id: "eq-20", name: "Laser Cutter", status: "online", lastMaintenance: "2026-02-15", mode: "manual", isEssential: false, cumulativeRuntimeHours: 0, lastRuntimeUpdateAt: new Date().toISOString() },
     ],
     alerts: [
       {

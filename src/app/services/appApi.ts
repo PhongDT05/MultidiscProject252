@@ -16,9 +16,20 @@ const cloneInitialLabs = (): LabRoom[] =>
     actuators: room.actuators.map((actuator) => ({ ...actuator })),
   }));
 
+const normalizeLabs = (labs: LabRoom[]): LabRoom[] =>
+  labs.map((room) => ({
+    ...room,
+    equipment: room.equipment.map((eq) => ({
+      ...eq,
+      cumulativeRuntimeHours: eq.cumulativeRuntimeHours ?? 0,
+      lastRuntimeUpdateAt: eq.lastRuntimeUpdateAt ?? new Date().toISOString(),
+    })),
+  }));
+
 const defaultAccounts: AuthAccount[] = [
   {
     id: '1',
+    username: 'admin',
     email: 'admin@smartlab.com',
     name: 'Dr. Sarah Chen',
     role: 'admin',
@@ -28,9 +39,10 @@ const defaultAccounts: AuthAccount[] = [
   },
   {
     id: '2',
+    username: 'manager',
     email: 'manager@smartlab.com',
     name: 'John Martinez',
-    role: 'manager',
+    role: 'technician',
     status: 'active',
     lastLogin: '2026-03-18 08:45',
     password: 'manager123',
@@ -38,9 +50,10 @@ const defaultAccounts: AuthAccount[] = [
   },
   {
     id: '5',
+    username: 'manager2',
     email: 'manager2@smartlab.com',
     name: 'Lisa Anderson',
-    role: 'manager',
+    role: 'technician',
     status: 'active',
     lastLogin: '2026-03-18 08:12',
     password: 'manager123',
@@ -48,6 +61,7 @@ const defaultAccounts: AuthAccount[] = [
   },
   {
     id: '3',
+    username: 'tech',
     email: 'tech@smartlab.com',
     name: 'Emily Watson',
     role: 'technician',
@@ -55,21 +69,43 @@ const defaultAccounts: AuthAccount[] = [
     lastLogin: '2026-03-18 07:30',
     password: 'tech123',
   },
-  {
-    id: '4',
-    email: 'viewer@smartlab.com',
-    name: 'Alex Johnson',
-    role: 'viewer',
-    status: 'active',
-    lastLogin: '2026-03-17 16:20',
-    password: 'viewer123',
-  },
 ];
 
 const sleep = (ms = API_DELAY_MS) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const usernameFromEmail = (email: string): string => {
+  const [localPart = 'user'] = email.toLowerCase().split('@');
+  const cleaned = localPart.replace(/[^a-z0-9._-]/g, '');
+  return cleaned || 'user';
+};
+
+const normalizeAccounts = (accounts: AuthAccount[]): AuthAccount[] => {
+  const seen = new Set<string>();
+
+  return accounts.map((account) => {
+    const baseUsername = (account.username || usernameFromEmail(account.email)).toLowerCase();
+    let username = baseUsername;
+    let suffix = 1;
+    const legacyRole = (account as { role: string }).role;
+
+    while (seen.has(username)) {
+      username = `${baseUsername}${suffix}`;
+      suffix += 1;
+    }
+
+    seen.add(username);
+
+    return {
+      ...account,
+      role: legacyRole === 'manager' ? 'technician' : account.role,
+      username,
+    };
+  });
+};
+
 const toPublicUser = (account: AuthAccount): User => ({
   id: account.id,
+  username: account.username,
   email: account.email,
   name: account.name,
   role: account.role,
@@ -99,7 +135,13 @@ const ensureSeedData = () => {
 const readAccounts = (): AuthAccount[] => {
   ensureSeedData();
   const parsed = parseJson<AuthAccount[]>(localStorage.getItem(USERS_KEY));
-  return Array.isArray(parsed) ? parsed : defaultAccounts;
+  const accounts = Array.isArray(parsed) ? parsed : defaultAccounts;
+  const filtered = accounts.filter((account) => account.role !== 'viewer');
+  const normalized = normalizeAccounts(filtered);
+  if (JSON.stringify(accounts) !== JSON.stringify(normalized)) {
+    writeAccounts(normalized);
+  }
+  return normalized;
 };
 
 const writeAccounts = (accounts: AuthAccount[]) => {
@@ -111,16 +153,22 @@ export const appApi = {
     ensureSeedData();
     await sleep();
     const parsed = parseJson<LabRoom[]>(localStorage.getItem(LABS_KEY));
-    return Array.isArray(parsed) ? parsed : cloneInitialLabs();
+    if (!Array.isArray(parsed)) {
+      return normalizeLabs(cloneInitialLabs());
+    }
+
+    const normalized = normalizeLabs(parsed);
+    localStorage.setItem(LABS_KEY, JSON.stringify(normalized));
+    return normalized;
   },
 
   async saveLabs(labs: LabRoom[]): Promise<void> {
     await sleep();
-    localStorage.setItem(LABS_KEY, JSON.stringify(labs));
+    localStorage.setItem(LABS_KEY, JSON.stringify(normalizeLabs(labs)));
   },
 
   async resetLabs(): Promise<LabRoom[]> {
-    const cloned = cloneInitialLabs();
+    const cloned = normalizeLabs(cloneInitialLabs());
     await this.saveLabs(cloned);
     return cloned;
   },
@@ -133,10 +181,21 @@ export const appApi = {
   async createManagedUser(user: ManagedUser): Promise<void> {
     await sleep();
     const accounts = readAccounts();
+    const baseUsername = (user.username || usernameFromEmail(user.email)).toLowerCase();
+    const existingUsernames = new Set(accounts.map((account) => account.username?.toLowerCase() ?? ''));
+    let username = baseUsername;
+    let suffix = 1;
+
+    while (existingUsernames.has(username)) {
+      username = `${baseUsername}${suffix}`;
+      suffix += 1;
+    }
+
     accounts.push({
       ...user,
+      username,
       password: 'smartlab123',
-      assignedLabs: user.role === 'manager' ? [] : undefined,
+      assignedLabs: user.assignedLabs,
     });
     writeAccounts(accounts);
   },
@@ -149,7 +208,7 @@ export const appApi = {
       return {
         ...account,
         ...updates,
-        assignedLabs: updates.role && updates.role !== 'manager' ? undefined : account.assignedLabs,
+        assignedLabs: updates.assignedLabs ?? account.assignedLabs,
       };
     });
     writeAccounts(accounts);
@@ -161,9 +220,10 @@ export const appApi = {
     writeAccounts(accounts);
   },
 
-  async authenticate(email: string, password: string): Promise<User | null> {
+  async authenticate(username: string, password: string): Promise<User | null> {
     await sleep(500);
-    const account = readAccounts().find((item) => item.email.toLowerCase() === email.toLowerCase());
+    const normalizedUsername = username.trim().toLowerCase();
+    const account = readAccounts().find((item) => item.username?.toLowerCase() === normalizedUsername);
     if (!account) return null;
     if (account.password !== password || account.status !== 'active') return null;
 

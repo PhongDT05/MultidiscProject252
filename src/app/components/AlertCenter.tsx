@@ -97,7 +97,7 @@ export function AlertCenter() {
   };
 
   const handleAcknowledge = (alert: AlertType) => {
-    if (!hasAnyPermission(['technician', 'manager', 'admin'])) {
+    if (!hasAnyPermission(['technician', 'admin'])) {
       toast.error('Permission Denied', {
         description: 'Only Technicians and above can acknowledge alerts.',
       });
@@ -115,9 +115,9 @@ export function AlertCenter() {
   };
 
   const handleSilenceAll = () => {
-    if (!hasAnyPermission(['manager', 'admin'])) {
+    if (!hasAnyPermission(['technician', 'admin'])) {
       toast.error('Permission Denied', {
-        description: 'Only Managers and Administrators can silence all alerts.',
+        description: 'Only Technicians and above can acknowledge all alerts.',
       });
       return;
     }
@@ -208,7 +208,7 @@ export function AlertCenter() {
               <Button 
                 variant="outline" 
                 onClick={handleSilenceAll}
-                disabled={!hasAnyPermission(['manager', 'admin'])}
+                disabled={!hasAnyPermission(['technician', 'admin'])}
               >
                 <CheckCircle2 className="w-4 h-4 mr-2" />
                 Acknowledge All
@@ -326,7 +326,7 @@ export function AlertCenter() {
                         <Button 
                           size="sm"
                           onClick={() => handleAcknowledge(alert)}
-                          disabled={!hasAnyPermission(['technician', 'manager', 'admin'])}
+                          disabled={!hasAnyPermission(['technician', 'admin'])}
                         >
                           <CheckCircle2 className="w-4 h-4 mr-2" />
                           Acknowledge

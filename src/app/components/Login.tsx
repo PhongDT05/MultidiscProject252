@@ -6,7 +6,7 @@ import { FlaskConical, Eye, EyeOff, LogIn } from 'lucide-react';
 export function Login() {
   const navigate = useNavigate();
   const { login } = useAuth();
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
@@ -17,7 +17,7 @@ export function Login() {
     setError('');
     setIsLoading(true);
 
-    const result = await login(email, password);
+    const result = await login(username, password);
     
     if (result.success) {
       navigate('/', { replace: true });
@@ -53,16 +53,16 @@ export function Login() {
             )}
 
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-2">
-                Email Address
+              <label htmlFor="username" className="block text-sm font-medium text-slate-700 mb-2">
+                Username
               </label>
               <input
-                type="email"
-                id="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                type="text"
+                id="username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
                 className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                placeholder="you@example.com"
+                placeholder="Enter your username"
                 required
                 disabled={isLoading}
               />

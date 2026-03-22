@@ -37,6 +37,33 @@ export function DataSimulator() {
     };
   }, []);
 
+  const withRuntimeUpdate = (room: LabRoom, updater: (targetRoom: LabRoom) => LabRoom) => {
+    const nowIso = new Date().toISOString();
+
+    updateRoom(room.id, (targetRoom) => {
+      const equipmentWithRuntime = targetRoom.equipment.map((equipment) => {
+        const previousUpdate = equipment.lastRuntimeUpdateAt
+          ? new Date(equipment.lastRuntimeUpdateAt).getTime()
+          : Date.now();
+        const elapsedMs = Math.max(0, Date.now() - previousUpdate);
+        const elapsedHours = elapsedMs / (1000 * 60 * 60);
+
+        return {
+          ...equipment,
+          cumulativeRuntimeHours:
+            (equipment.cumulativeRuntimeHours ?? 0) +
+            (equipment.status === 'online' ? elapsedHours : 0),
+          lastRuntimeUpdateAt: nowIso,
+        };
+      });
+
+      return updater({
+        ...targetRoom,
+        equipment: equipmentWithRuntime,
+      });
+    });
+  };
+
   const generateRandomChange = () => {
     const changeTypes = [
       'temperature',
@@ -84,7 +111,7 @@ export function DataSimulator() {
     const isOutsideOptimal = newTemp < 20 || newTemp > 24;
     
     if (isOutsideOptimal) {
-      updateRoom(room.id, (targetRoom) => ({
+      withRuntimeUpdate(room, (targetRoom) => ({
         ...targetRoom,
         temperature: newTemp,
       }));
@@ -98,7 +125,10 @@ export function DataSimulator() {
         newValue: newTemp,
         description: `Temperature ${change > 0 ? 'increased' : 'decreased'} by ${Math.abs(change).toFixed(1)}°C`,
       });
+      return;
     }
+
+    withRuntimeUpdate(room, (targetRoom) => targetRoom);
   };
 
   const simulateHumidityChange = (room: LabRoom) => {
@@ -110,7 +140,7 @@ export function DataSimulator() {
     const isOutsideOptimal = newHumidity < 40 || newHumidity > 60;
     
     if (isOutsideOptimal) {
-      updateRoom(room.id, (targetRoom) => ({
+      withRuntimeUpdate(room, (targetRoom) => ({
         ...targetRoom,
         humidity: newHumidity,
       }));
@@ -124,7 +154,10 @@ export function DataSimulator() {
         newValue: newHumidity,
         description: `Humidity ${change > 0 ? 'increased' : 'decreased'} by ${Math.abs(change)}%`,
       });
+      return;
     }
+
+    withRuntimeUpdate(room, (targetRoom) => targetRoom);
   };
 
   const simulateCO2Change = (room: LabRoom) => {
@@ -136,7 +169,7 @@ export function DataSimulator() {
     const isOutsideOptimal = newCO2 >= 500;
     
     if (isOutsideOptimal) {
-      updateRoom(room.id, (targetRoom) => ({
+      withRuntimeUpdate(room, (targetRoom) => ({
         ...targetRoom,
         co2Level: newCO2,
       }));
@@ -150,7 +183,10 @@ export function DataSimulator() {
         newValue: newCO2,
         description: `CO₂ level ${change > 0 ? 'increased' : 'decreased'} by ${Math.abs(change)} ppm`,
       });
+      return;
     }
+
+    withRuntimeUpdate(room, (targetRoom) => targetRoom);
   };
 
   const simulateOccupancyChange = (room: LabRoom) => {
@@ -158,9 +194,12 @@ export function DataSimulator() {
     const change = Math.random() > 0.5 ? 1 : -1;
     const newOccupancy = Math.max(0, Math.min(room.maxOccupancy, oldOccupancy + change));
     
-    if (newOccupancy === oldOccupancy) return; // No change if at limits
+    if (newOccupancy === oldOccupancy) {
+      withRuntimeUpdate(room, (targetRoom) => targetRoom);
+      return;
+    }
 
-    updateRoom(room.id, (targetRoom) => ({
+    withRuntimeUpdate(room, (targetRoom) => ({
       ...targetRoom,
       occupancy: newOccupancy,
     }));
@@ -184,9 +223,12 @@ export function DataSimulator() {
     const oldStatus = equipment.status;
     const newStatus = statuses[Math.floor(Math.random() * statuses.length)];
     
-    if (oldStatus === newStatus) return;
+    if (oldStatus === newStatus) {
+      withRuntimeUpdate(room, (targetRoom) => targetRoom);
+      return;
+    }
 
-    updateRoom(room.id, (targetRoom) => ({
+    withRuntimeUpdate(room, (targetRoom) => ({
       ...targetRoom,
       equipment: targetRoom.equipment.map((eq) =>
         eq.id === equipment.id ? { ...eq, status: newStatus } : eq,
@@ -209,9 +251,12 @@ export function DataSimulator() {
     const oldStatus = room.status;
     const newStatus = statuses[Math.floor(Math.random() * statuses.length)];
     
-    if (oldStatus === newStatus) return;
+    if (oldStatus === newStatus) {
+      withRuntimeUpdate(room, (targetRoom) => targetRoom);
+      return;
+    }
 
-    updateRoom(room.id, (targetRoom) => ({
+    withRuntimeUpdate(room, (targetRoom) => ({
       ...targetRoom,
       status: newStatus,
     }));

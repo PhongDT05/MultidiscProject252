@@ -33,12 +33,31 @@ import {
 
 export function RoomDetail() {
   const { roomId } = useParams<{ roomId: string }>();
-  const { hasPermission, canAccessLab } = useAuth();
+  const { hasPermission, hasAnyPermission, canAccessLab } = useAuth();
   const { labs, toggleEquipmentMode } = useAppData();
   const room = labs.find((r) => r.id === roomId);
   
   // Check if user can control equipment (technician and above)
   const canControlEquipment = hasPermission('technician');
+  const canViewLogsAndRuntime = hasAnyPermission(['technician', 'admin']);
+
+  const formatWorkedTime = (hours: number) => {
+    const totalMinutes = Math.max(0, Math.round(hours * 60));
+    const days = Math.floor(totalMinutes / (60 * 24));
+    const remainingAfterDays = totalMinutes - days * 60 * 24;
+    const wholeHours = Math.floor(remainingAfterDays / 60);
+    const minutes = remainingAfterDays % 60;
+
+    if (days > 0) {
+      return `${days}d ${wholeHours}h`;
+    }
+
+    if (wholeHours > 0) {
+      return `${wholeHours}h ${minutes}m`;
+    }
+
+    return `${minutes}m`;
+  };
   
   if (!room) {
     return (
@@ -277,6 +296,12 @@ export function RoomDetail() {
                       <Clock className="w-3 h-3" />
                       Last maintenance: {new Date(equipment.lastMaintenance).toLocaleDateString()}
                     </div>
+                    {canViewLogsAndRuntime && (
+                      <div className="flex items-center gap-1 text-sm text-slate-500 mt-1">
+                        <Clock className="w-3 h-3" />
+                        Runtime: {formatWorkedTime(equipment.cumulativeRuntimeHours ?? 0)}
+                      </div>
+                    )}
                   </div>
                   <div className="flex flex-col items-end gap-2">
                     {equipment.status === "online" && (
@@ -382,9 +407,11 @@ export function RoomDetail() {
       </div>
 
       {/* Room-Specific Change Log */}
-      <div className="mt-8">
-        <ChangeLog roomId={room.id} maxHeight="400px" showFilters={true} />
-      </div>
+      {canViewLogsAndRuntime && (
+        <div className="mt-8">
+          <ChangeLog roomId={room.id} maxHeight="400px" showFilters={true} />
+        </div>
+      )}
     </div>
   );
 }

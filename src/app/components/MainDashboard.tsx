@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 
 export function MainDashboard() {
-  const { user, hasPermission, canAccessLab } = useAuth();
+  const { user, hasPermission, hasAnyPermission, canAccessLab } = useAuth();
   const { labs, isLoading, error } = useAppData();
   const [showLabDetails, setShowLabDetails] = useState(false);
   const [showRoleInfo, setShowRoleInfo] = useState(false);
@@ -71,6 +71,7 @@ export function MainDashboard() {
   const tempStatus = getTemperatureStatus(parseFloat(avgTemperature));
   const humidityStatus = getHumidityStatus(avgHumidity);
   const co2Status = getCO2Status(avgCO2);
+  const canViewLogs = hasAnyPermission(['technician', 'admin']);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -153,7 +154,6 @@ export function MainDashboard() {
                 {!showRoleInfo && (
                   <p className="text-sm text-slate-600">
                     {user.role === 'admin' && 'Full system access including user management and system configuration'}
-                    {user.role === 'manager' && 'Access to equipment controls and lab management'}
                     {user.role === 'technician' && 'Equipment control access'}
                     {user.role === 'viewer' && 'Read-only dashboard access'}
                   </p>
@@ -178,12 +178,12 @@ export function MainDashboard() {
                         <span>Control equipment (Auto/Manual modes)</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        {hasPermission('manager') ? (
+                        {hasPermission('technician') ? (
                           <CheckCircle className="w-4 h-4 text-green-600" />
                         ) : (
                           <AlertCircle className="w-4 h-4 text-slate-300" />
                         )}
-                        <span>Manage lab settings and alert configurations</span>
+                        <span>Acknowledge alerts and review logs</span>
                       </div>
                       <div className="flex items-center gap-2">
                         {hasPermission('admin') ? (
@@ -251,7 +251,7 @@ export function MainDashboard() {
       )}
 
       {/* Overview Stats */}
-      {hasPermission('manager') && (
+      {hasPermission('technician') && (
         <div className="mb-8">
           <h2 className="text-2xl font-semibold text-slate-900 mb-6">Overview</h2>
           
@@ -574,9 +574,11 @@ export function MainDashboard() {
       </div>
 
       {/* Data Change Log */}
-      <div className="mt-8">
-        <ChangeLog maxHeight="500px" showFilters={true} />
-      </div>
+      {canViewLogs && (
+        <div className="mt-8">
+          <ChangeLog maxHeight="500px" showFilters={true} />
+        </div>
+      )}
     </div>
   );
 }

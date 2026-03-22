@@ -1,7 +1,8 @@
-export type UserRole = 'admin' | 'manager' | 'technician' | 'viewer';
+export type UserRole = 'admin' | 'technician' | 'viewer';
 
 export interface User {
   id: string;
+  username?: string;
   email: string;
   name: string;
   role: UserRole;
@@ -11,11 +12,13 @@ export interface User {
 
 export interface ManagedUser {
   id: string;
+  username?: string;
   email: string;
   name: string;
   role: UserRole;
   lastLogin?: string;
   status: 'active' | 'inactive';
+  assignedLabs?: string[];
 }
 
 export interface AuthAccount extends ManagedUser {

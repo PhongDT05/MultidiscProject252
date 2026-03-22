@@ -7,7 +7,8 @@ export type { UserRole, User };
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  effectiveRole: UserRole;
+  login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   hasPermission: (requiredRole: UserRole) => boolean;
   hasAnyPermission: (roles: UserRole[]) => boolean;
@@ -16,10 +17,9 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Role hierarchy: admin > manager > technician > viewer
+// Role hierarchy: admin > technician > viewer
 const roleHierarchy: Record<UserRole, number> = {
-  admin: 4,
-  manager: 3,
+  admin: 3,
   technician: 2,
   viewer: 1,
 };
@@ -47,11 +47,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
-    const authenticatedUser = await appApi.authenticate(email, password);
+  const login = async (username: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    const authenticatedUser = await appApi.authenticate(username, password);
 
     if (!authenticatedUser) {
-      return { success: false, error: 'Invalid email or password' };
+      return { success: false, error: 'Invalid username or password' };
     }
 
     setUser(authenticatedUser);
@@ -64,18 +64,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void appApi.clearSession();
   };
 
+  // Unauthenticated users operate with viewer-level (guest/student) permissions.
+  const effectiveRole: UserRole = user?.role ?? 'viewer';
+
   const hasPermission = (requiredRole: UserRole): boolean => {
-    if (!user) return false;
-    return roleHierarchy[user.role] >= roleHierarchy[requiredRole];
+    return roleHierarchy[effectiveRole] >= roleHierarchy[requiredRole];
   };
 
   const hasAnyPermission = (roles: UserRole[]): boolean => {
-    if (!user) return false;
-    return roles.some(role => roleHierarchy[user.role] >= roleHierarchy[role]);
+    return roles.some(role => roleHierarchy[effectiveRole] >= roleHierarchy[role]);
   };
 
   const canAccessLab = (labId: string): boolean => {
-    if (!user) return false;
+    if (!user) return true;
     // Admin can access all labs
     if (user.role === 'admin') return true;
     // If assignedLabs is undefined/null, user can access all labs
@@ -100,6 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         isAuthenticated: !!user,
+        effectiveRole,
         login,
         logout,
         hasPermission,
