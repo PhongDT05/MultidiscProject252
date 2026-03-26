@@ -17,11 +17,11 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Role hierarchy: admin > technician > viewer
+// Role hierarchy: admin > technician > student
 const roleHierarchy: Record<UserRole, number> = {
   admin: 3,
   technician: 2,
-  viewer: 1,
+  student: 1,
 };
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -64,8 +64,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void appApi.clearSession();
   };
 
-  // Unauthenticated users operate with viewer-level (guest/student) permissions.
-  const effectiveRole: UserRole = user?.role ?? 'viewer';
+  // Unauthenticated users operate with student-level read-only permissions.
+  const effectiveRole: UserRole = user?.role ?? 'student';
 
   const hasPermission = (requiredRole: UserRole): boolean => {
     return roleHierarchy[effectiveRole] >= roleHierarchy[requiredRole];

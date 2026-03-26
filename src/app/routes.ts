@@ -46,8 +46,8 @@ export const router = createBrowserRouter([
       {
         path: "config",
         lazy: async () => {
-          const { SystemConfig } = await import("./components/SystemConfig");
-          return { Component: SystemConfig };
+          const { ThresholdConfig } = await import("./components/ThresholdConfig");
+          return { Component: ThresholdConfig };
         },
       },
       {

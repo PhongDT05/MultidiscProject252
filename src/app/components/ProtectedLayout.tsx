@@ -1,17 +1,11 @@
-import { Navigate, useLocation } from 'react-router';
+import { Navigate } from 'react-router';
 import { useAuth } from '../contexts/AuthContext';
 import { Root } from './Root';
 
 export function ProtectedLayout() {
   const { isAuthenticated } = useAuth();
-  const location = useLocation();
 
-  const guestAllowed =
-    location.pathname === '/' ||
-    location.pathname === '/alerts' ||
-    location.pathname.startsWith('/room/');
-
-  if (!isAuthenticated && !guestAllowed) {
+  if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
 

@@ -71,7 +71,6 @@ export function DataSimulator() {
       'co2',
       'occupancy',
       'equipment',
-      'status',
     ];
     
     const changeType = changeTypes[Math.floor(Math.random() * changeTypes.length)];
@@ -95,9 +94,6 @@ export function DataSimulator() {
         break;
       case 'equipment':
         simulateEquipmentChange(room);
-        break;
-      case 'status':
-        simulateStatusChange(room);
         break;
     }
   };
@@ -243,32 +239,6 @@ export function DataSimulator() {
       oldValue: oldStatus,
       newValue: newStatus,
       description: `${equipment.name} status changed from ${oldStatus} to ${newStatus}`,
-    });
-  };
-
-  const simulateStatusChange = (room: LabRoom) => {
-    const statuses = ['optimal', 'warning', 'critical'] as const;
-    const oldStatus = room.status;
-    const newStatus = statuses[Math.floor(Math.random() * statuses.length)];
-    
-    if (oldStatus === newStatus) {
-      withRuntimeUpdate(room, (targetRoom) => targetRoom);
-      return;
-    }
-
-    withRuntimeUpdate(room, (targetRoom) => ({
-      ...targetRoom,
-      status: newStatus,
-    }));
-
-    addLog({
-      roomId: room.id,
-      roomName: room.name,
-      changeType: 'status',
-      field: 'Room Status',
-      oldValue: oldStatus,
-      newValue: newStatus,
-      description: `Room status changed from ${oldStatus} to ${newStatus}`,
     });
   };
 

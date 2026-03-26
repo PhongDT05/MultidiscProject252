@@ -1,17 +1,8 @@
 # Quick Start Guide - Smart Lab Dashboard
 
-## Access Modes
+## Access
 
-### Guest (Default)
-- Open the app and start immediately in Guest mode (no login required)
-- Can view:
-  - Dashboard
-  - Room detail pages
-  - Alerts page
-- Cannot:
-  - Modify equipment or settings
-  - View logs
-  - View device worked-time
+You must sign in before viewing dashboard content.
 
 ### Sign In for Elevated Roles
 Use one of the following accounts:
@@ -23,7 +14,7 @@ Use one of the following accounts:
 | Technician (Labs 4-6) | manager2 | manager123 | Operational controls with lab assignment |
 | Technician (Global) | tech | tech123 | Operational controls |
 
-Note: Viewer login account is removed. Read-only behavior is provided through Guest mode.
+Note: Student is a read-only role that can be assigned by an administrator.
 
 ## Running the Application
 
@@ -49,4 +40,4 @@ http://localhost:5173/
 
 - Admin: full privileges
 - Technician: operational privileges (controls, logs, worked-time, alert acknowledge-all)
-- Guest: read-only monitoring on approved routes
+- Student: read-only monitoring after login

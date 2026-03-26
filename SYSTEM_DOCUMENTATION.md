@@ -261,7 +261,7 @@ Managers can be restricted to specific labs through an `assignedLabs` list on us
 
 - `manager@smartlab.com` manages labs 1-3.
 - `manager2@smartlab.com` manages labs 4-6.
-- Admin, Technician, and Viewer accounts are not lab-restricted by default.
+- Admin, Technician, and Student accounts are not lab-restricted by default.
 
 Access control behavior:
 
@@ -878,7 +878,7 @@ function checkAndCreateAlerts(labId, temperature, humidity, co2Level) {
 **Authentication & Authorization**:
 - User login system (JWT, session-based, or OAuth)
 - Role-based access control (RBAC)
-  - Viewer: Read-only access
+  - Student: Read-only access
   - Operator: Can control equipment
   - Admin: Full access including configuration
 

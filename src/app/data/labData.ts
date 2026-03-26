@@ -32,6 +32,8 @@ export interface IoTDevice {
   name: string;
   type: "sensor" | "gateway" | "actuator";
   status: "online" | "offline" | "error" | "warning";
+  installedAt?: string; // ISO timestamp of installation
+  estimatedMaintenanceHours?: number; // Expected maintenance interval in operating hours
   lastSeen: string; // ISO timestamp
   signalStrength: number; // 0-100
   batteryLevel?: number; // 0-100 for battery-powered devices

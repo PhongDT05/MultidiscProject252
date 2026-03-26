@@ -112,12 +112,6 @@ export function Login() {
               )}
             </button>
           </form>
-
-          <div className="mt-6 pt-6 border-t border-slate-200">
-            <p className="text-xs text-slate-500 text-center">
-              See QUICK_START_GUIDE.md for demo accounts and role information
-            </p>
-          </div>
         </div>
       </div>
     </div>

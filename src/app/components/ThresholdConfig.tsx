@@ -9,8 +9,7 @@ import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Alert, AlertDescription } from './ui/alert';
 import { Badge } from './ui/badge';
-import { Separator } from './ui/separator';
-import { Save, AlertTriangle, CheckCircle2, Settings2, Thermometer, Droplets, Wind, Lightbulb } from 'lucide-react';
+import { Save, AlertTriangle, Thermometer, Droplets, Wind, Lightbulb } from 'lucide-react';
 import { toast } from 'sonner';
 
 // UC1 - Threshold Configuration
@@ -206,34 +205,10 @@ export function ThresholdConfig() {
             <Thermometer className="w-5 h-5 text-red-600" />
             <CardTitle>Temperature Thresholds (°C)</CardTitle>
           </div>
-          <CardDescription>Set safe temperature ranges for automatic climate control</CardDescription>
+          <CardDescription>Set warning range for temperature monitoring</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="temp-min">Critical Minimum</Label>
-              <Input
-                id="temp-min"
-                type="number"
-                value={currentThreshold.temperature.min}
-                onChange={(e) => updateThreshold('temperature', 'min', parseFloat(e.target.value))}
-                disabled={user?.role !== 'admin'}
-                className="mt-1"
-              />
-              <p className="text-xs text-slate-500 mt-1">Alert when temperature drops below this value</p>
-            </div>
-            <div>
-              <Label htmlFor="temp-max">Critical Maximum</Label>
-              <Input
-                id="temp-max"
-                type="number"
-                value={currentThreshold.temperature.max}
-                onChange={(e) => updateThreshold('temperature', 'max', parseFloat(e.target.value))}
-                disabled={user?.role !== 'admin'}
-                className="mt-1"
-              />
-              <p className="text-xs text-slate-500 mt-1">Alert when temperature exceeds this value</p>
-            </div>
             <div>
               <Label htmlFor="temp-warn-min">Warning Minimum</Label>
               <Input
@@ -269,32 +244,10 @@ export function ThresholdConfig() {
             <Droplets className="w-5 h-5 text-blue-600" />
             <CardTitle>Humidity Thresholds (%)</CardTitle>
           </div>
-          <CardDescription>Configure acceptable humidity levels for lab equipment</CardDescription>
+          <CardDescription>Set warning range for humidity monitoring</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="hum-min">Critical Minimum</Label>
-              <Input
-                id="hum-min"
-                type="number"
-                value={currentThreshold.humidity.min}
-                onChange={(e) => updateThreshold('humidity', 'min', parseFloat(e.target.value))}
-                disabled={user?.role !== 'admin'}
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <Label htmlFor="hum-max">Critical Maximum</Label>
-              <Input
-                id="hum-max"
-                type="number"
-                value={currentThreshold.humidity.max}
-                onChange={(e) => updateThreshold('humidity', 'max', parseFloat(e.target.value))}
-                disabled={user?.role !== 'admin'}
-                className="mt-1"
-              />
-            </div>
             <div>
               <Label htmlFor="hum-warn-min">Warning Minimum</Label>
               <Input
@@ -328,7 +281,7 @@ export function ThresholdConfig() {
             <Wind className="w-5 h-5 text-green-600" />
             <CardTitle>CO₂ Level Thresholds (ppm)</CardTitle>
           </div>
-          <CardDescription>Set air quality thresholds for ventilation control</CardDescription>
+          <CardDescription>Set warning level for air quality monitoring</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -343,18 +296,6 @@ export function ThresholdConfig() {
                 className="mt-1"
               />
               <p className="text-xs text-slate-500 mt-1">Activate increased ventilation</p>
-            </div>
-            <div>
-              <Label htmlFor="co2-max">Critical Maximum</Label>
-              <Input
-                id="co2-max"
-                type="number"
-                value={currentThreshold.co2Level.max}
-                onChange={(e) => updateThreshold('co2Level', 'max', parseFloat(e.target.value))}
-                disabled={user?.role !== 'admin'}
-                className="mt-1"
-              />
-              <p className="text-xs text-slate-500 mt-1">Trigger emergency exhaust fans</p>
             </div>
           </div>
         </CardContent>
@@ -426,25 +367,6 @@ export function ThresholdConfig() {
         </div>
       </div>
 
-      {/* Info Box */}
-      <Card className="bg-blue-50 border-blue-200">
-        <CardContent className="pt-6">
-          <div className="flex gap-3">
-            <CheckCircle2 className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-            <div className="space-y-2">
-              <p className="font-semibold text-blue-900">Automated Response System</p>
-              <p className="text-sm text-blue-800">
-                When thresholds are violated, the system automatically triggers actuators (HVAC, exhaust fans, ventilation) 
-                and generates severity alerts. Critical alerts require immediate attention, while warnings indicate approaching unsafe conditions.
-              </p>
-              <Separator className="my-2 bg-blue-200" />
-              <p className="text-xs text-blue-700">
-                Threshold Configuration automatically triggers hazard responses when environmental limits are exceeded
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }

@@ -2,24 +2,20 @@
 
 ## Overview
 
-This Smart Lab Dashboard now uses a guest-first access model:
+This Smart Lab Dashboard now uses a login-first access model:
 
-- First-time visitors enter in Guest (student) mode without login.
-- Guest mode is read-only and can view lab conditions only on approved routes.
+- Users must sign in before accessing dashboard content.
+- Student role remains read-only and must sign in like other roles.
 - Signing in unlocks role-specific privileges.
-- Signing out returns users to Guest mode on `/` instead of the login screen.
+- Signing out returns users to the login screen.
 
 Authentication state and permissions are managed in React Context and persisted with localStorage in the mock API layer.
 
 ## Access Model
 
-### Guest (Student Mode)
-- Login required: No
-- Effective permission level: Viewer-equivalent
-- Allowed routes:
-  - `/`
-  - `/room/:roomId`
-  - `/alerts`
+### Student
+- Login required: Yes
+- Effective permission level: Student (read-only)
 - Restrictions:
   - Cannot control equipment
   - Cannot acknowledge alerts
@@ -47,14 +43,14 @@ Authentication state and permissions are managed in React Context and persisted 
 ## Role Hierarchy
 
 ```text
-Admin (Level 4)
+Admin (Level 3)
   ↓
 Technician (Level 2)
   ↓
-Viewer / Guest-equivalent (Level 1)
+Student (Level 1)
 ```
 
-Important: Viewer is no longer provided as a seeded login account. Read-only behavior is delivered through Guest mode.
+Important: Read-only behavior is delivered through Student mode.
 
 ## Demo Accounts
 
@@ -81,7 +77,7 @@ Password: tech123
 Cumulative equipment worked-time is tracked and persisted for equipment entities.
 
 - Visible to: Technician, Admin
-- Hidden from: Guest
+- Hidden from: Student
 - Runtime updates as the simulator runs and equipment remains online
 
 ## Current Security Scope

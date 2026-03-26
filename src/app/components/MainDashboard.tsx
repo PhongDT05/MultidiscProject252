@@ -16,7 +16,6 @@ import {
   ChevronDown,
   ChevronUp,
   Shield,
-  Info,
   Settings,
   ShieldCheck,
   Lock,
@@ -26,7 +25,6 @@ export function MainDashboard() {
   const { user, hasPermission, hasAnyPermission, canAccessLab } = useAuth();
   const { labs, isLoading, error } = useAppData();
   const [showLabDetails, setShowLabDetails] = useState(false);
-  const [showRoleInfo, setShowRoleInfo] = useState(false);
   
   // Filter labs based on user access
   const accessibleLabs = labs.filter(lab => canAccessLab(lab.id));
@@ -52,20 +50,17 @@ export function MainDashboard() {
   const getTemperatureStatus = (temp: number) => {
     const t = parseFloat(temp.toString());
     if (t >= 20 && t <= 24) return "optimal";
-    if (t >= 18 && t < 20 || t > 24 && t <= 26) return "warning";
-    return "critical";
+    return "warning";
   };
 
   const getHumidityStatus = (humidity: number) => {
     if (humidity >= 40 && humidity <= 60) return "optimal";
-    if (humidity >= 35 && humidity < 40 || humidity > 60 && humidity <= 65) return "warning";
-    return "critical";
+    return "warning";
   };
 
   const getCO2Status = (co2: number) => {
     if (co2 < 500) return "optimal";
-    if (co2 >= 500 && co2 < 700) return "warning";
-    return "critical";
+    return "warning";
   };
 
   const tempStatus = getTemperatureStatus(parseFloat(avgTemperature));
@@ -85,6 +80,9 @@ export function MainDashboard() {
         return "text-slate-900";
     }
   };
+
+  const getMetricColorClass = (status: string) =>
+    status === "optimal" ? "text-green-600" : "text-amber-600";
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -131,83 +129,6 @@ export function MainDashboard() {
         </div>
       )}
       
-      {/* Role Permission Banner */}
-      {user && (
-        <div className="mb-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200 p-4">
-          <div className="flex items-start justify-between">
-            <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0">
-                <Shield className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <h3 className="font-semibold text-slate-900">
-                    Signed in as <span className="capitalize">{user.role}</span>
-                  </h3>
-                  <button
-                    onClick={() => setShowRoleInfo(!showRoleInfo)}
-                    className="text-blue-600 hover:text-blue-700"
-                  >
-                    <Info className="w-4 h-4" />
-                  </button>
-                </div>
-                {!showRoleInfo && (
-                  <p className="text-sm text-slate-600">
-                    {user.role === 'admin' && 'Full system access including user management and system configuration'}
-                    {user.role === 'technician' && 'Equipment control access'}
-                    {user.role === 'viewer' && 'Read-only dashboard access'}
-                  </p>
-                )}
-                {showRoleInfo && (
-                  <div className="mt-2 p-3 bg-white rounded-lg border border-blue-200">
-                    <div className="text-sm text-slate-700 space-y-2">
-                      <div className="flex items-center gap-2">
-                        {hasPermission('viewer') ? (
-                          <CheckCircle className="w-4 h-4 text-green-600" />
-                        ) : (
-                          <AlertCircle className="w-4 h-4 text-slate-300" />
-                        )}
-                        <span>View all dashboards and data</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {hasPermission('technician') ? (
-                          <CheckCircle className="w-4 h-4 text-green-600" />
-                        ) : (
-                          <AlertCircle className="w-4 h-4 text-slate-300" />
-                        )}
-                        <span>Control equipment (Auto/Manual modes)</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {hasPermission('technician') ? (
-                          <CheckCircle className="w-4 h-4 text-green-600" />
-                        ) : (
-                          <AlertCircle className="w-4 h-4 text-slate-300" />
-                        )}
-                        <span>Acknowledge alerts and review logs</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {hasPermission('admin') ? (
-                          <CheckCircle className="w-4 h-4 text-green-600" />
-                        ) : (
-                          <AlertCircle className="w-4 h-4 text-slate-300" />
-                        )}
-                        <span className="font-medium">User management & system configuration</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-            <button
-              onClick={() => setShowRoleInfo(!showRoleInfo)}
-              className="text-xs px-3 py-1 bg-white border border-blue-200 rounded-lg text-blue-700 hover:bg-blue-50 transition-colors"
-            >
-              {showRoleInfo ? 'Hide' : 'Show'} Permissions
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Admin Quick Access Panel */}
       {hasPermission('admin') && (
         <div className="mb-6 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-200 p-4">
@@ -233,7 +154,7 @@ export function MainDashboard() {
               </div>
             </Link>
             <Link
-              to="/config"
+              to="/thresholds"
               className="flex items-center gap-3 p-3 bg-white rounded-lg border border-purple-200 hover:shadow-md transition-all group"
             >
               <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center">
@@ -241,9 +162,9 @@ export function MainDashboard() {
               </div>
               <div className="flex-1">
                 <div className="font-medium text-slate-900 group-hover:text-purple-600 transition-colors">
-                  System Configuration
+                  Threshold Configuration
                 </div>
-                <div className="text-xs text-slate-600">Configure thresholds and settings</div>
+                <div className="text-xs text-slate-600">Configure warning thresholds</div>
               </div>
             </Link>
           </div>
@@ -444,6 +365,9 @@ export function MainDashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {accessibleLabs.map((room) => {
             const isAccessible = canAccessLab(room.id);
+            const roomTempStatus = getTemperatureStatus(room.temperature);
+            const roomHumidityStatus = getHumidityStatus(room.humidity);
+            const roomCO2Status = getCO2Status(room.co2Level);
             return (
               <Link
                 key={room.id}
@@ -495,7 +419,7 @@ export function MainDashboard() {
                       <Thermometer className="w-3 h-3" />
                       Temp
                     </div>
-                    <div className="text-sm font-semibold text-slate-900">
+                    <div className={`text-sm font-semibold ${getMetricColorClass(roomTempStatus)}`}>
                       {room.temperature}°C
                     </div>
                   </div>
@@ -504,14 +428,18 @@ export function MainDashboard() {
                       <Droplets className="w-3 h-3" />
                       Humidity
                     </div>
-                    <div className="text-sm font-semibold text-slate-900">{room.humidity}%</div>
+                    <div className={`text-sm font-semibold ${getMetricColorClass(roomHumidityStatus)}`}>
+                      {room.humidity}%
+                    </div>
                   </div>
                   <div>
                     <div className="flex items-center gap-1 text-xs text-slate-600 mb-1">
                       <Wind className="w-3 h-3" />
                       CO₂
                     </div>
-                    <div className="text-sm font-semibold text-slate-900">{room.co2Level} ppm</div>
+                    <div className={`text-sm font-semibold ${getMetricColorClass(roomCO2Status)}`}>
+                      {room.co2Level} ppm
+                    </div>
                   </div>
                 </div>
 
@@ -564,7 +492,7 @@ export function MainDashboard() {
                 {/* View Details */}
                 <div className="mt-4 pt-4 border-t border-slate-200">
                   <span className="text-sm text-blue-600 hover:text-blue-700">
-                    View Details →
+                    View Room Details →
                   </span>
                 </div>
               </Link>

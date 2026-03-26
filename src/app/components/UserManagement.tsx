@@ -11,13 +11,12 @@ import {
   ShieldCheck,
   X,
   Save,
-  Mail,
   UserCircle
 } from 'lucide-react';
 
 interface UserData {
   id: string;
-  email: string;
+  username: string;
   name: string;
   role: UserRole;
   lastLogin?: string;
@@ -31,10 +30,15 @@ export function UserManagement() {
   const [showAddUser, setShowAddUser] = useState(false);
   const [newUser, setNewUser] = useState<Partial<UserData>>({
     name: '',
-    email: '',
+    username: '',
     role: 'technician',
     status: 'active'
   });
+
+  const getDisplayUsername = (userData: { username?: string; email: string }) => {
+    if (userData.username && userData.username.trim().length > 0) return userData.username;
+    return userData.email.split('@')[0] || 'unknown';
+  };
 
   // Only admins can access this component
   if (!hasPermission('admin')) {
@@ -55,7 +59,7 @@ export function UserManagement() {
         return <ShieldCheck className="w-4 h-4 text-purple-600" />;
       case 'technician':
         return <ShieldAlert className="w-4 h-4 text-green-600" />;
-      case 'viewer':
+      case 'student':
         return <Shield className="w-4 h-4 text-slate-600" />;
     }
   };
@@ -66,18 +70,30 @@ export function UserManagement() {
         return 'bg-purple-100 text-purple-800 border-purple-200';
       case 'technician':
         return 'bg-green-100 text-green-800 border-green-200';
-      case 'viewer':
+      case 'student':
         return 'bg-slate-100 text-slate-800 border-slate-200';
     }
   };
 
-  const handleEditUser = (userData: UserData) => {
-    setEditingUser({ ...userData });
+  const handleEditUser = (userData: { id: string; username?: string; email: string; name: string; role: UserRole; lastLogin?: string; status: 'active' | 'inactive' }) => {
+    setEditingUser({
+      ...userData,
+      username: getDisplayUsername(userData),
+    });
   };
 
   const handleSaveEdit = () => {
     if (editingUser) {
-      updateUser(editingUser.id, editingUser);
+      const isSelf = editingUser.id === currentUser?.id;
+      const original = users.find((item) => item.id === editingUser.id);
+
+      updateUser(editingUser.id, {
+        ...editingUser,
+        name: isSelf ? editingUser.name : original?.name ?? editingUser.name,
+        username: isSelf
+          ? editingUser.username
+          : (original?.username || getDisplayUsername(original || { email: 'unknown@local' })),
+      });
       setEditingUser(null);
     }
   };
@@ -93,7 +109,7 @@ export function UserManagement() {
   };
 
   const handleAddUser = () => {
-    if (!newUser.name || !newUser.email || !newUser.role) {
+    if (!newUser.name || !newUser.username || !newUser.role) {
       alert('Please fill in all required fields');
       return;
     }
@@ -101,16 +117,19 @@ export function UserManagement() {
     const user: UserData = {
       id: Date.now().toString(),
       name: newUser.name,
-      email: newUser.email,
+      username: newUser.username,
       role: newUser.role as UserRole,
       status: newUser.status as 'active' | 'inactive',
       lastLogin: undefined
     };
 
-    addUser(user);
+    addUser({
+      ...user,
+      email: `${newUser.username}@smartlab.local`,
+    });
     setNewUser({
       name: '',
-      email: '',
+      username: '',
       role: 'technician',
       status: 'active'
     });
@@ -120,6 +139,7 @@ export function UserManagement() {
   const roleStats = {
     admin: users.filter(u => u.role === 'admin').length,
     technician: users.filter(u => u.role === 'technician').length,
+    student: users.filter(u => u.role === 'student').length,
   };
 
   return (
@@ -154,7 +174,7 @@ export function UserManagement() {
       )}
 
       {/* Role Statistics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         <div className="bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200 rounded-lg p-4">
           <div className="flex items-center gap-3 mb-2">
             <ShieldCheck className="w-6 h-6 text-purple-600" />
@@ -169,6 +189,14 @@ export function UserManagement() {
             <h3 className="font-medium text-green-900">Technicians</h3>
           </div>
           <p className="text-3xl font-bold text-green-900">{roleStats.technician}</p>
+        </div>
+
+        <div className="bg-gradient-to-br from-slate-50 to-slate-100 border border-slate-200 rounded-lg p-4">
+          <div className="flex items-center gap-3 mb-2">
+            <Shield className="w-6 h-6 text-slate-600" />
+            <h3 className="font-medium text-slate-900">Students</h3>
+          </div>
+          <p className="text-3xl font-bold text-slate-900">{roleStats.student}</p>
         </div>
       </div>
 
@@ -201,14 +229,14 @@ export function UserManagement() {
 
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">
-                Email Address
+                Username
               </label>
               <input
-                type="email"
-                value={newUser.email}
-                onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                type="text"
+                value={newUser.username}
+                onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="john@smartlab.com"
+                placeholder="john"
               />
             </div>
 
@@ -222,6 +250,7 @@ export function UserManagement() {
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="technician">Technician</option>
+                <option value="student">Student</option>
                 <option value="admin">Administrator</option>
               </select>
             </div>
@@ -269,7 +298,7 @@ export function UserManagement() {
                   User
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-700 uppercase tracking-wider">
-                  Email
+                  Username
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-700 uppercase tracking-wider">
                   Role
@@ -303,8 +332,8 @@ export function UserManagement() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center gap-2 text-slate-600">
-                      <Mail className="w-4 h-4" />
-                      {userData.email}
+                      <UserCircle className="w-4 h-4" />
+                      {getDisplayUsername(userData)}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
@@ -367,6 +396,12 @@ export function UserManagement() {
             </div>
 
             <div className="space-y-4">
+              {editingUser.id !== currentUser?.id && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700">
+                  Name and username are locked for other users.
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   Full Name
@@ -376,18 +411,20 @@ export function UserManagement() {
                   value={editingUser.name}
                   onChange={(e) => setEditingUser({ ...editingUser, name: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  disabled={editingUser.id !== currentUser?.id}
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Email Address
+                  Username
                 </label>
                 <input
-                  type="email"
-                  value={editingUser.email}
-                  onChange={(e) => setEditingUser({ ...editingUser, email: e.target.value })}
+                  type="text"
+                  value={editingUser.username}
+                  onChange={(e) => setEditingUser({ ...editingUser, username: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  disabled={editingUser.id !== currentUser?.id}
                 />
               </div>
 
@@ -402,6 +439,7 @@ export function UserManagement() {
                   disabled={editingUser.id === currentUser?.id}
                 >
                   <option value="technician">Technician</option>
+                  <option value="student">Student</option>
                   <option value="admin">Administrator</option>
                 </select>
                 {editingUser.id === currentUser?.id && (

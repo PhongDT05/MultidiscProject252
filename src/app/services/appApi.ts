@@ -1,4 +1,4 @@
-import { labRooms, type LabRoom } from '../data/labData';
+import { labRooms, type LabRoom, type IoTDevice, type Equipment } from '../data/labData';
 import type { AuthAccount, ManagedUser, User } from '../types/auth';
 
 const LABS_KEY = 'smartlab_api_labs';
@@ -16,6 +16,23 @@ const cloneInitialLabs = (): LabRoom[] =>
     actuators: room.actuators.map((actuator) => ({ ...actuator })),
   }));
 
+const installationDateFromDeviceId = (deviceId: string): string => {
+  const hash = [...deviceId].reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  const installedDaysAgo = 90 + (hash % 270); // 3 to 12 months ago
+  return new Date(Date.now() - installedDaysAgo * 24 * 60 * 60 * 1000).toISOString();
+};
+
+const maintenanceHoursByType = (type: 'sensor' | 'gateway' | 'actuator'): number => {
+  switch (type) {
+    case 'gateway':
+      return 8000;
+    case 'actuator':
+      return 6000;
+    default:
+      return 4000;
+  }
+};
+
 const normalizeLabs = (labs: LabRoom[]): LabRoom[] =>
   labs.map((room) => ({
     ...room,
@@ -24,7 +41,53 @@ const normalizeLabs = (labs: LabRoom[]): LabRoom[] =>
       cumulativeRuntimeHours: eq.cumulativeRuntimeHours ?? 0,
       lastRuntimeUpdateAt: eq.lastRuntimeUpdateAt ?? new Date().toISOString(),
     })),
+    iotDevices: room.iotDevices.map((device) => ({
+      ...device,
+      installedAt: device.installedAt ?? installationDateFromDeviceId(device.id),
+      estimatedMaintenanceHours:
+        device.estimatedMaintenanceHours ?? maintenanceHoursByType(device.type),
+    })),
   }));
+
+// Device creation helpers
+const generateDeviceId = (type: 'iot' | 'equipment'): string => {
+  const prefix = type === 'iot' ? 'iot' : 'eq';
+  const timestamp = Date.now().toString(36);
+  const random = Math.random().toString(36).substring(2, 8);
+  return `${prefix}-${timestamp}-${random}`;
+};
+
+const createIoTDeviceWithDefaults = (data: Partial<IoTDevice>): IoTDevice => {
+  const id = data.id || generateDeviceId('iot');
+  return {
+    id,
+    name: data.name || 'Unnamed Device',
+    type: data.type || 'sensor',
+    status: data.status || 'online',
+    lastSeen: data.lastSeen || new Date().toISOString(),
+    signalStrength: data.signalStrength ?? 85,
+    batteryLevel: data.batteryLevel,
+    firmwareVersion: data.firmwareVersion || '1.0.0',
+    dataRate: data.dataRate || 5,
+    location: data.location || '',
+    installedAt: data.installedAt || new Date().toISOString(),
+    estimatedMaintenanceHours: data.estimatedMaintenanceHours || maintenanceHoursByType(data.type || 'sensor'),
+  };
+};
+
+const createEquipmentWithDefaults = (data: Partial<Equipment>): Equipment => {
+  const id = data.id || generateDeviceId('equipment');
+  return {
+    id,
+    name: data.name || 'Unnamed Equipment',
+    status: data.status || 'online',
+    lastMaintenance: data.lastMaintenance || new Date().toISOString().split('T')[0],
+    mode: data.mode || 'auto',
+    isEssential: data.isEssential ?? false,
+    cumulativeRuntimeHours: data.cumulativeRuntimeHours ?? 0,
+    lastRuntimeUpdateAt: data.lastRuntimeUpdateAt || new Date().toISOString(),
+  };
+};
 
 const defaultAccounts: AuthAccount[] = [
   {
@@ -97,7 +160,12 @@ const normalizeAccounts = (accounts: AuthAccount[]): AuthAccount[] => {
 
     return {
       ...account,
-      role: legacyRole === 'manager' ? 'technician' : account.role,
+      role:
+        legacyRole === 'manager'
+          ? 'technician'
+          : legacyRole === 'viewer'
+            ? 'student'
+            : account.role,
       username,
     };
   });
@@ -136,8 +204,7 @@ const readAccounts = (): AuthAccount[] => {
   ensureSeedData();
   const parsed = parseJson<AuthAccount[]>(localStorage.getItem(USERS_KEY));
   const accounts = Array.isArray(parsed) ? parsed : defaultAccounts;
-  const filtered = accounts.filter((account) => account.role !== 'viewer');
-  const normalized = normalizeAccounts(filtered);
+  const normalized = normalizeAccounts(accounts);
   if (JSON.stringify(accounts) !== JSON.stringify(normalized)) {
     writeAccounts(normalized);
   }
@@ -252,4 +319,9 @@ export const appApi = {
     await sleep(120);
     localStorage.removeItem(SESSION_KEY);
   },
+
+  // Device creation helpers (exported for use in other services and context)
+  generateDeviceId,
+  createIoTDeviceWithDefaults,
+  createEquipmentWithDefaults,
 };

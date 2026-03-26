@@ -1,9 +1,11 @@
 import { useParams } from "react-router";
+import { useState } from "react";
 import { generateHistoricalData } from "../data/labData";
 import { useAuth } from "../contexts/AuthContext";
 import { useAppData } from "../contexts/AppDataContext";
 import { ChangeLog } from "./ChangeLog";
 import { DataSimulator } from "./DataSimulator";
+import { DeviceInsertion } from "./DeviceInsertion";
 import {
   Thermometer,
   Droplets,
@@ -19,6 +21,7 @@ import {
   Settings,
   Lock,
   ShieldAlert,
+  Plus,
 } from "lucide-react";
 import {
   LineChart,
@@ -34,12 +37,35 @@ import {
 export function RoomDetail() {
   const { roomId } = useParams<{ roomId: string }>();
   const { hasPermission, hasAnyPermission, canAccessLab } = useAuth();
-  const { labs, toggleEquipmentMode } = useAppData();
+  const { labs, toggleEquipmentMode, updateRoom } = useAppData();
+  const [showDeviceInsertion, setShowDeviceInsertion] = useState(false);
   const room = labs.find((r) => r.id === roomId);
   
   // Check if user can control equipment (technician and above)
   const canControlEquipment = hasPermission('technician');
   const canViewLogsAndRuntime = hasAnyPermission(['technician', 'admin']);
+  const canAddDevices = hasPermission('technician') && canAccessLab(room?.id || '');
+
+  const toggleEquipmentEnabled = (equipmentId: string) => {
+    if (!room || !canControlEquipment) return;
+
+    updateRoom(room.id, (currentRoom) => ({
+      ...currentRoom,
+      equipment: currentRoom.equipment.map((equipment) => {
+        if (equipment.id !== equipmentId) return equipment;
+
+        const enableDevice = equipment.status === 'offline' || equipment.status === 'maintenance';
+        return {
+          ...equipment,
+          status: enableDevice ? 'online' : 'offline',
+          mode: enableDevice ? equipment.mode : 'manual',
+          lastMaintenance: enableDevice
+            ? equipment.lastMaintenance
+            : new Date().toISOString().split('T')[0],
+        };
+      }),
+    }));
+  };
 
   const formatWorkedTime = (hours: number) => {
     const totalMinutes = Math.max(0, Math.round(hours * 60));
@@ -280,7 +306,18 @@ export function RoomDetail() {
 
       {/* Equipment Status */}
       <div>
-        <h3 className="text-lg font-semibold text-slate-900 mb-4">Equipment Status</h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-slate-900">Equipment Status</h3>
+          {canAddDevices && (
+            <button
+              onClick={() => setShowDeviceInsertion(true)}
+              className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+            >
+              <Plus className="w-4 h-4" />
+              Add Device
+            </button>
+          )}
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {room.equipment.map((equipment) => {
             const mode = equipment.mode;
@@ -374,6 +411,23 @@ export function RoomDetail() {
                       </div>
                     </div>
                   )}
+
+                  {canControlEquipment && (
+                    <div className="mt-3">
+                      <button
+                        onClick={() => toggleEquipmentEnabled(equipment.id)}
+                        className={`w-full px-3 py-2 rounded text-xs font-medium transition-colors ${
+                          equipment.status === 'offline' || equipment.status === 'maintenance'
+                            ? 'bg-green-50 border border-green-200 text-green-700 hover:bg-green-100'
+                            : 'bg-amber-50 border border-amber-200 text-amber-700 hover:bg-amber-100'
+                        }`}
+                      >
+                        {equipment.status === 'offline' || equipment.status === 'maintenance'
+                          ? 'Enable Device'
+                          : 'Disable Device'}
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Show manual controls when in manual mode */}
@@ -411,6 +465,18 @@ export function RoomDetail() {
         <div className="mt-8">
           <ChangeLog roomId={room.id} maxHeight="400px" showFilters={true} />
         </div>
+      )}
+
+      {/* Device Insertion Modal */}
+      {room && (
+        <DeviceInsertion
+          isOpen={showDeviceInsertion}
+          onClose={() => setShowDeviceInsertion(false)}
+          roomId={room.id}
+          onSuccess={() => {
+            // Refresh is automatic via context
+          }}
+        />
       )}
     </div>
   );

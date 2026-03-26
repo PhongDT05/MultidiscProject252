@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { IoTDevice } from '../data/labData';
 import { useAppData } from '../contexts/AppDataContext';
+import { useAuth } from '../contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
@@ -25,9 +26,28 @@ import {
 
 // UC8 - System Health Monitoring & Diagnostics
 export function DeviceHealth() {
-  const { labs } = useAppData();
+  const { labs, updateRoom } = useAppData();
+  const { hasPermission } = useAuth();
   const [selectedRoom, setSelectedRoom] = useState<string>('all');
   const [selectedType, setSelectedType] = useState<string>('all');
+  const [expandedDeviceId, setExpandedDeviceId] = useState<string | null>(null);
+  const canToggleDevices = hasPermission('technician');
+
+  const toggleDeviceEnabled = (deviceId: string, roomId: string) => {
+    if (!canToggleDevices) return;
+
+    updateRoom(roomId, (room) => ({
+      ...room,
+      iotDevices: room.iotDevices.map((device) => {
+        if (device.id !== deviceId) return device;
+        return {
+          ...device,
+          status: device.status === 'offline' ? 'online' : 'offline',
+          lastSeen: new Date().toISOString(),
+        };
+      }),
+    }));
+  };
 
   // Get all devices across all rooms
   const getAllDevices = (): (IoTDevice & { roomName: string; roomId: string })[] => {
@@ -107,6 +127,26 @@ export function DeviceHealth() {
     if (seconds < 60) return `${seconds}s ago`;
     if (minutes < 60) return `${minutes}m ago`;
     return `${hours}h ago`;
+  };
+
+  const formatInstalledDate = (installedAt?: string): string => {
+    if (!installedAt) return 'Unknown';
+    return new Date(installedAt).toLocaleDateString();
+  };
+
+  const getEstimatedMaintenanceLabel = (device: IoTDevice): string => {
+    if (!device.installedAt || !device.estimatedMaintenanceHours) {
+      return 'Unknown';
+    }
+
+    const installedTime = new Date(device.installedAt).getTime();
+    const elapsedHours = (Date.now() - installedTime) / (1000 * 60 * 60);
+    const remainingHours = Math.max(0, device.estimatedMaintenanceHours - elapsedHours);
+    const remainingDays = Math.ceil(remainingHours / 24);
+
+    return remainingHours <= 0
+      ? `Due now (${device.estimatedMaintenanceHours}h interval)`
+      : `~${remainingDays} days (${device.estimatedMaintenanceHours}h interval)`;
   };
 
   return (
@@ -228,17 +268,18 @@ export function DeviceHealth() {
           Device Status ({filteredDevices.length} devices)
         </h2>
 
-        {filteredDevices.map(device => (
-          <Card key={device.id} className={`${
+        <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-3">
+          {filteredDevices.map(device => (
+            <Card key={device.id} className={`${
             device.status === 'error' || device.status === 'offline' ? 'border-red-300 bg-red-50' :
             device.status === 'warning' ? 'border-amber-300 bg-amber-50' : ''
           }`}>
-            <CardContent className="pt-6">
-              <div className="space-y-4">
+            <CardContent className="pt-4">
+              <div className="space-y-3">
                 {/* Device Header */}
                 <div className="flex items-start justify-between">
                   <div className="flex items-start gap-3">
-                    <div className={`p-3 rounded-lg ${
+                    <div className={`p-2 rounded-lg ${
                       device.type === 'sensor' ? 'bg-blue-100' :
                       device.type === 'gateway' ? 'bg-purple-100' : 'bg-green-100'
                     }`}>
@@ -252,7 +293,7 @@ export function DeviceHealth() {
                       <p className="text-sm text-slate-600 mt-1">
                         {device.roomName} • {device.location}
                       </p>
-                      <div className="flex items-center gap-2 mt-2">
+                      <div className="flex items-center gap-2 mt-1">
                         {getStatusBadge(device.status)}
                         <Badge variant="outline" className="capitalize">
                           {getDeviceIcon(device.type)}
@@ -261,16 +302,35 @@ export function DeviceHealth() {
                       </div>
                     </div>
                   </div>
-                  <Button variant="outline" size="sm">View Details</Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      setExpandedDeviceId((current) => (current === device.id ? null : device.id))
+                    }
+                  >
+                    {expandedDeviceId === device.id ? 'Hide Details' : 'View Details'}
+                  </Button>
                 </div>
 
-                <Separator />
+                {canToggleDevices && (
+                  <div className="flex justify-end">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => toggleDeviceEnabled(device.id, device.roomId)}
+                      className={device.status === 'offline' ? 'border-green-300 text-green-700' : 'border-amber-300 text-amber-700'}
+                    >
+                      {device.status === 'offline' ? 'Enable Device' : 'Disable Device'}
+                    </Button>
+                  </div>
+                )}
 
                 {/* Device Metrics */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 gap-3">
                   {/* Signal Strength */}
                   <div>
-                    <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center justify-between mb-1">
                       <div className="flex items-center gap-2">
                         {device.signalStrength >= 60 ? (
                           <Wifi className="w-4 h-4 text-slate-600" />
@@ -287,7 +347,7 @@ export function DeviceHealth() {
                   {/* Battery Level (if applicable) */}
                   {device.batteryLevel !== undefined && (
                     <div>
-                      <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center justify-between mb-1">
                         <div className="flex items-center gap-2">
                           <Battery className="w-4 h-4 text-slate-600" />
                           <span className="text-sm font-medium">Battery</span>
@@ -295,65 +355,63 @@ export function DeviceHealth() {
                         <span className="text-sm font-semibold">{device.batteryLevel}%</span>
                       </div>
                       <Progress value={device.batteryLevel} className="h-2" indicatorClassName={getBatteryColor(device.batteryLevel)} />
-                      {device.batteryLevel < 30 && (
-                        <p className="text-xs text-red-600 mt-1">⚠️ Low battery - replacement needed</p>
-                      )}
                     </div>
                   )}
 
                   {/* Data Rate */}
                   <div>
-                    <div className="flex items-center gap-2 mb-2">
+                    <div className="flex items-center gap-2 mb-1">
                       <Signal className="w-4 h-4 text-slate-600" />
                       <span className="text-sm font-medium">Data Rate</span>
                     </div>
-                    <p className="text-lg font-semibold text-slate-900">
+                    <p className="text-base font-semibold text-slate-900">
                       {device.dataRate} <span className="text-sm font-normal text-slate-600">readings/min</span>
                     </p>
                   </div>
 
                   {/* Last Seen */}
                   <div>
-                    <div className="flex items-center gap-2 mb-2">
+                    <div className="flex items-center gap-2 mb-1">
                       <Clock className="w-4 h-4 text-slate-600" />
                       <span className="text-sm font-medium">Last Seen</span>
                     </div>
-                    <p className="text-lg font-semibold text-slate-900">{getTimeSinceLastSeen(device.lastSeen)}</p>
-                    <p className="text-xs text-slate-600 mt-1">
-                      {new Date(device.lastSeen).toLocaleString()}
-                    </p>
+                    <p className="text-base font-semibold text-slate-900">{getTimeSinceLastSeen(device.lastSeen)}</p>
                   </div>
                 </div>
 
-                {/* Firmware Version */}
-                <div className="flex items-center justify-between pt-2">
-                  <span className="text-sm text-slate-600">Firmware Version: {device.firmwareVersion}</span>
-                  <span className="text-sm text-slate-600">Device ID: {device.id}</span>
-                </div>
+                {expandedDeviceId === device.id && (
+                  <>
+                    <Separator />
+                    <div className="grid grid-cols-1 gap-1 text-sm text-slate-600">
+                      <span><strong className="text-slate-700">Device ID:</strong> {device.id}</span>
+                      <span><strong className="text-slate-700">Firmware:</strong> {device.firmwareVersion}</span>
+                      <span><strong className="text-slate-700">Installed:</strong> {formatInstalledDate(device.installedAt)}</span>
+                      <span><strong className="text-slate-700">Estimated maintenance:</strong> {getEstimatedMaintenanceLabel(device)}</span>
+                      <span><strong className="text-slate-700">Heartbeat time:</strong> {new Date(device.lastSeen).toLocaleString()}</span>
+                    </div>
+                  </>
+                )}
 
                 {/* Warnings */}
                 {device.status === 'error' && (
-                  <div className="bg-red-100 border border-red-200 rounded-lg p-3 mt-2">
+                  <div className="bg-red-100 border border-red-200 rounded-lg p-2">
                     <div className="flex items-start gap-2">
-                      <XCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                      <XCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
                       <div>
-                        <p className="font-semibold text-red-900">Device Error Detected</p>
-                        <p className="text-sm text-red-800 mt-1">
-                          Device is not responding. Check power supply and network connectivity. 
-                          Critical safety behavior is preserved locally.
-                        </p>
+                        <p className="font-semibold text-red-900 text-sm">Device Error Detected</p>
+                        <p className="text-xs text-red-800 mt-1">Device not responding. Check power and network.</p>
                       </div>
                     </div>
                   </div>
                 )}
 
                 {device.status === 'warning' && (
-                  <div className="bg-amber-100 border border-amber-200 rounded-lg p-3 mt-2">
+                  <div className="bg-amber-100 border border-amber-200 rounded-lg p-2">
                     <div className="flex items-start gap-2">
-                      <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                      <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
                       <div>
-                        <p className="font-semibold text-amber-900">Device Warning</p>
-                        <p className="text-sm text-amber-800 mt-1">
+                        <p className="font-semibold text-amber-900 text-sm">Device Warning</p>
+                        <p className="text-xs text-amber-800 mt-1">
                           {device.batteryLevel && device.batteryLevel < 30 
                             ? 'Low battery detected. Schedule battery replacement.' 
                             : 'Weak signal detected. Check device position or network infrastructure.'}
@@ -364,15 +422,12 @@ export function DeviceHealth() {
                 )}
 
                 {device.status === 'offline' && (
-                  <div className="bg-red-100 border border-red-200 rounded-lg p-3 mt-2">
+                  <div className="bg-red-100 border border-red-200 rounded-lg p-2">
                     <div className="flex items-start gap-2">
-                      <WifiOff className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                      <WifiOff className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
                       <div>
-                        <p className="font-semibold text-red-900">Device Offline</p>
-                        <p className="text-sm text-red-800 mt-1">
-                          No heartbeat received within defined time window. System will preserve critical 
-                          safety behavior locally and synchronize data once connectivity is restored.
-                        </p>
+                        <p className="font-semibold text-red-900 text-sm">Device Offline</p>
+                        <p className="text-xs text-red-800 mt-1">No heartbeat in expected window. Reconnect device.</p>
                       </div>
                     </div>
                   </div>
@@ -380,32 +435,9 @@ export function DeviceHealth() {
               </div>
             </CardContent>
           </Card>
-        ))}
+          ))}
+        </div>
       </div>
-
-      {/* Info */}
-      <Card className="bg-blue-50 border-blue-200">
-        <CardContent className="pt-6">
-          <div className="flex gap-3">
-            <Activity className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-            <div className="space-y-2">
-              <p className="font-semibold text-blue-900">System Health Monitoring</p>
-              <p className="text-sm text-blue-800">
-                The system continuously monitors device connectivity through heartbeat signals and last-seen timestamps. 
-                When devices go offline or encounter errors, operators receive fault indications. Critical safety behaviors 
-                are preserved locally at the edge, and data synchronization occurs automatically once connectivity is restored.
-              </p>
-              <Separator className="my-2 bg-blue-200" />
-              <ul className="text-xs text-blue-700 space-y-1">
-                <li>• <strong>Online</strong>: Device functioning normally with recent heartbeat</li>
-                <li>• <strong>Warning</strong>: Low battery or weak signal strength</li>
-                <li>• <strong>Error</strong>: Device malfunction detected</li>
-                <li>• <strong>Offline</strong>: No heartbeat within timeout window</li>
-              </ul>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }

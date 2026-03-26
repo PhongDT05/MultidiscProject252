@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { labRooms, type LabRoom, type Alert } from '../data/labData';
+import { labRooms, type LabRoom, type Alert, type IoTDevice, type Equipment, type Actuator } from '../data/labData';
 import { appApi } from '../services/appApi';
 import type { ManagedUser } from '../types/auth';
 
@@ -16,10 +16,36 @@ interface AppDataContextType {
   toggleEquipmentMode: (roomId: string, equipmentId: string) => void;
   acknowledgeAlert: (alertId: string, actorName: string) => boolean;
   acknowledgeAllAlerts: (actorName: string, options?: { roomId?: string; severity?: Alert['severity'] }) => number;
+  addIoTDevice: (roomId: string, device: Partial<IoTDevice>) => { success: boolean; error?: string };
+  addEquipment: (roomId: string, equipment: Partial<Equipment>) => { success: boolean; error?: string };
+  addActuator: (roomId: string, actuator: Partial<Actuator>) => { success: boolean; error?: string };
   resetLabs: () => void;
   isLoading: boolean;
   error: string | null;
 }
+
+const isTemperatureOptimal = (value: number) => value >= 20 && value <= 24;
+const isHumidityOptimal = (value: number) => value >= 40 && value <= 60;
+const isCO2Optimal = (value: number) => value < 500;
+
+const applyDerivedStatus = (room: LabRoom): LabRoom => {
+  const warningCount = [
+    !isTemperatureOptimal(room.temperature),
+    !isHumidityOptimal(room.humidity),
+    !isCO2Optimal(room.co2Level),
+  ].filter(Boolean).length;
+
+  const nextStatus: LabRoom['status'] =
+    warningCount > 1 ? 'critical' : warningCount > 0 ? 'warning' : 'optimal';
+
+  return {
+    ...room,
+    status: nextStatus,
+  };
+};
+
+const applyDerivedStatusToLabs = (rooms: LabRoom[]): LabRoom[] =>
+  rooms.map((room) => applyDerivedStatus(room));
 
 const cloneInitialLabs = (): LabRoom[] =>
   labRooms.map((room) => ({
@@ -50,12 +76,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         ]);
 
         if (!isMounted) return;
-        setLabs(loadedLabs.length > 0 ? loadedLabs : cloneInitialLabs());
+        setLabs(applyDerivedStatusToLabs(loadedLabs.length > 0 ? loadedLabs : cloneInitialLabs()));
         setUsers(loadedUsers);
       } catch {
         if (!isMounted) return;
         setError('Failed to load application data. Using fallback state.');
-        setLabs(cloneInitialLabs());
+        setLabs(applyDerivedStatusToLabs(cloneInitialLabs()));
       } finally {
         if (isMounted) {
           setIsLoading(false);
@@ -115,7 +141,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
     setLabs((prev) => {
       previousLabs = prev;
-      nextLabs = prev.map((room) => (room.id === roomId ? updater(room) : room));
+      nextLabs = prev.map((room) =>
+        room.id === roomId ? applyDerivedStatus(updater(room)) : room,
+      );
       return nextLabs;
     });
     setError(null);
@@ -189,11 +217,99 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     return count;
   };
 
+  const addIoTDevice = (roomId: string, device: Partial<IoTDevice>): { success: boolean; error?: string } => {
+    try {
+      let nextLabs: LabRoom[] = [];
+      setLabs((prev) => {
+        nextLabs = prev.map((room) =>
+          room.id === roomId
+            ? {
+                ...room,
+                iotDevices: [...room.iotDevices, appApi.createIoTDeviceWithDefaults(device)],
+              }
+            : room,
+        );
+        return nextLabs;
+      });
+      setError(null);
+      void appApi.saveLabs(nextLabs).catch(() => {
+        setError('Failed to save IoT device.');
+      });
+      return { success: true };
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to add IoT device';
+      setError(errorMsg);
+      return { success: false, error: errorMsg };
+    }
+  };
+
+  const addEquipment = (roomId: string, equipment: Partial<Equipment>): { success: boolean; error?: string } => {
+    try {
+      let nextLabs: LabRoom[] = [];
+      setLabs((prev) => {
+        nextLabs = prev.map((room) =>
+          room.id === roomId
+            ? {
+                ...room,
+                equipment: [...room.equipment, appApi.createEquipmentWithDefaults(equipment)],
+              }
+            : room,
+        );
+        return nextLabs;
+      });
+      setError(null);
+      void appApi.saveLabs(nextLabs).catch(() => {
+        setError('Failed to save equipment.');
+      });
+      return { success: true };
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to add equipment';
+      setError(errorMsg);
+      return { success: false, error: errorMsg };
+    }
+  };
+
+  const addActuator = (roomId: string, actuator: Partial<Actuator>): { success: boolean; error?: string } => {
+    try {
+      const id = actuator.id || appApi.generateDeviceId('equipment');
+      const newActuator: Actuator = {
+        id,
+        name: actuator.name || 'Unnamed Actuator',
+        type: actuator.type || 'hvac',
+        status: actuator.status || 'off',
+        mode: actuator.mode || 'auto',
+        lastActivated: actuator.lastActivated,
+      };
+
+      let nextLabs: LabRoom[] = [];
+      setLabs((prev) => {
+        nextLabs = prev.map((room) =>
+          room.id === roomId
+            ? {
+                ...room,
+                actuators: [...room.actuators, newActuator],
+              }
+            : room,
+        );
+        return nextLabs;
+      });
+      setError(null);
+      void appApi.saveLabs(nextLabs).catch(() => {
+        setError('Failed to save actuator.');
+      });
+      return { success: true };
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to add actuator';
+      setError(errorMsg);
+      return { success: false, error: errorMsg };
+    }
+  };
+
   const resetLabs = () => {
     setError(null);
     void appApi
       .resetLabs()
-      .then((resetData) => setLabs(resetData))
+      .then((resetData) => setLabs(applyDerivedStatusToLabs(resetData)))
       .catch(() => setError('Failed to reset labs.'));
   };
 
@@ -209,6 +325,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       toggleEquipmentMode,
       acknowledgeAlert,
       acknowledgeAllAlerts,
+      addIoTDevice,
+      addEquipment,
+      addActuator,
       resetLabs,
       isLoading,
       error,
