@@ -20,7 +20,7 @@ export function Login() {
     const result = await login(username, password);
     
     if (result.success) {
-      navigate('/', { replace: true });
+      navigate('/dashboard', { replace: true });
     } else {
       setError(result.error || 'Login failed');
     }
@@ -112,6 +112,13 @@ export function Login() {
               )}
             </button>
           </form>
+
+          {/* Password Recovery Help Text */}
+          <div className="mt-8 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <p className="text-sm text-blue-800">
+              <strong>Forgot your password?</strong> If you forget your password, contact admin to have your password reset.
+            </p>
+          </div>
         </div>
       </div>
     </div>

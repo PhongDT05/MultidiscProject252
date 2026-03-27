@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation, useNavigate } from "react-router";
-import { FlaskConical, LayoutDashboard, RefreshCw, User, LogOut, Shield, Users, Sliders, Activity, Bell } from "lucide-react";
+import { FlaskConical, LayoutDashboard, RefreshCw, User, LogOut, Shield, Users, Sliders, Activity, Bell, Home, KeyRound } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -7,7 +7,7 @@ export function Root() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout, hasPermission } = useAuth();
-  const isMainDashboard = location.pathname === "/";
+  const isMainDashboard = location.pathname === "/dashboard";
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -90,7 +90,7 @@ export function Root() {
               )}
 
               {/* User Profile/Role Card with Dropdown */}
-              {isMainDashboard && user && (
+              {user && (
                 <div className="relative pl-4 border-l border-slate-200">
                   <button
                     onClick={() => setShowUserMenu(!showUserMenu)}
@@ -127,7 +127,15 @@ export function Root() {
                         {/* Common Menu Items */}
                         <div className="border-b border-slate-200">
                           <Link
-                            to="/alerts"
+                            to="/dashboard"
+                            onClick={() => setShowUserMenu(false)}
+                            className="w-full flex items-center gap-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                          >
+                            <Home className="w-4 h-4" />
+                            Overview
+                          </Link>
+                          <Link
+                            to="/dashboard/alerts"
                             onClick={() => setShowUserMenu(false)}
                             className="w-full flex items-center gap-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
                           >
@@ -135,12 +143,20 @@ export function Root() {
                             Alert Center
                           </Link>
                           <Link
-                            to="/devices"
+                            to="/dashboard/devices"
                             onClick={() => setShowUserMenu(false)}
                             className="w-full flex items-center gap-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
                           >
                             <Activity className="w-4 h-4" />
                             Device Health
+                          </Link>
+                          <Link
+                            to="/dashboard/change-password"
+                            onClick={() => setShowUserMenu(false)}
+                            className="w-full flex items-center gap-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                          >
+                            <KeyRound className="w-4 h-4" />
+                            Change Password
                           </Link>
                         </div>
 
@@ -148,7 +164,7 @@ export function Root() {
                         {hasPermission('admin') && (
                           <div className="border-b border-slate-200">
                             <Link
-                              to="/thresholds"
+                              to="/dashboard/thresholds"
                               onClick={() => setShowUserMenu(false)}
                               className="w-full flex items-center gap-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
                             >
@@ -156,7 +172,7 @@ export function Root() {
                               Threshold Config
                             </Link>
                             <Link
-                              to="/users"
+                              to="/dashboard/users"
                               onClick={() => setShowUserMenu(false)}
                               className="w-full flex items-center gap-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
                             >
@@ -177,10 +193,10 @@ export function Root() {
                   )}
                 </div>
               )}
-              {/* Back to Overview for detail pages */}
-              {!isMainDashboard && (
+              {/* Back to Overview for detail pages when no logged-in user */}
+              {!isMainDashboard && !user && (
                 <Link
-                  to="/"
+                  to="/dashboard"
                   className="inline-flex items-center gap-2 px-4 py-2 text-sm text-slate-700 hover:text-blue-600 hover:bg-slate-50 rounded-lg transition-colors"
                 >
                   <LayoutDashboard className="w-4 h-4" />

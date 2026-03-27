@@ -11,7 +11,9 @@ import {
   ShieldCheck,
   X,
   Save,
-  UserCircle
+  UserCircle,
+  RotateCcw,
+  AlertCircle
 } from 'lucide-react';
 
 interface UserData {
@@ -34,6 +36,9 @@ export function UserManagement() {
     role: 'technician',
     status: 'active'
   });
+  const [resetPasswordUserId, setResetPasswordUserId] = useState<string | null>(null);
+  const [resetPasswordLoading, setResetPasswordLoading] = useState(false);
+  const [resetPasswordMessage, setResetPasswordMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const getDisplayUsername = (userData: { username?: string; email: string }) => {
     if (userData.username && userData.username.trim().length > 0) return userData.username;
@@ -108,6 +113,41 @@ export function UserManagement() {
     }
   };
 
+  const handleResetPassword = async (userId: string, userName: string) => {
+    if (!currentUser?.id) return;
+
+    const confirmed = confirm(
+      `Reset password for ${userName}? The new password will be set to "smartlab123".`
+    );
+    if (!confirmed) return;
+
+    setResetPasswordUserId(userId);
+    setResetPasswordLoading(true);
+    setResetPasswordMessage(null);
+
+    const { success, error } = await (
+      await import('../services/appApi')
+    ).appApi.resetUserPassword(userId, currentUser.id);
+
+    if (success) {
+      setResetPasswordMessage({
+        type: 'success',
+        text: `Password reset successfully. New password is "smartlab123".`,
+      });
+      setTimeout(() => {
+        setResetPasswordUserId(null);
+        setResetPasswordMessage(null);
+      }, 3000);
+    } else {
+      setResetPasswordMessage({
+        type: 'error',
+        text: error || 'Failed to reset password.',
+      });
+    }
+
+    setResetPasswordLoading(false);
+  };
+
   const handleAddUser = () => {
     if (!newUser.name || !newUser.username || !newUser.role) {
       alert('Please fill in all required fields');
@@ -170,6 +210,18 @@ export function UserManagement() {
       {error && (
         <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
           {error}
+        </div>
+      )}
+
+      {/* Reset Password Message */}
+      {resetPasswordMessage && (
+        <div className={`mb-6 flex items-start gap-3 rounded-lg p-4 text-sm ${
+          resetPasswordMessage.type === 'success'
+            ? 'bg-green-50 border border-green-200 text-green-700'
+            : 'bg-red-50 border border-red-200 text-red-700'
+        }`}>
+          <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+          <p>{resetPasswordMessage.text}</p>
         </div>
       )}
 
@@ -364,13 +416,23 @@ export function UserManagement() {
                         <Edit2 className="w-4 h-4" />
                       </button>
                       {userData.id !== currentUser?.id && (
-                        <button
-                          onClick={() => handleDeleteUser(userData.id)}
-                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                          title="Delete user"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <>
+                          <button
+                            onClick={() => handleResetPassword(userData.id, userData.name)}
+                            className="p-2 text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
+                            title="Reset password"
+                            disabled={resetPasswordLoading && resetPasswordUserId === userData.id}
+                          >
+                            <RotateCcw className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteUser(userData.id)}
+                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Delete user"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </>
                       )}
                     </div>
                   </td>

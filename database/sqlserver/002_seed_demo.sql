@@ -1,0 +1,114 @@
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+GO
+
+-- Smart Lab Dashboard - SQL Server Demo Seed v1
+-- Requires: 001_schema.sql
+
+MERGE smartlab.[Role] AS target
+USING (VALUES
+    (1, 'ADMIN', 'Administrator'),
+    (2, 'TECHNICIAN', 'Technician'),
+    (3, 'STUDENT', 'Student')
+) AS source (RoleId, RoleCode, RoleName)
+ON target.RoleId = source.RoleId
+WHEN MATCHED THEN
+    UPDATE SET RoleCode = source.RoleCode, RoleName = source.RoleName
+WHEN NOT MATCHED THEN
+    INSERT (RoleId, RoleCode, RoleName)
+    VALUES (source.RoleId, source.RoleCode, source.RoleName);
+GO
+
+INSERT INTO smartlab.[User] (Username, Email, PasswordHash, DisplayName, RoleId, AccountStatus)
+SELECT 'admin', 'admin@smartlab.local', 'CHANGE_ME_HASH', 'System Admin', 1, 'active'
+WHERE NOT EXISTS (SELECT 1 FROM smartlab.[User] WHERE Username = 'admin');
+
+INSERT INTO smartlab.[User] (Username, Email, PasswordHash, DisplayName, RoleId, AccountStatus)
+SELECT 'manager', 'manager@smartlab.local', 'CHANGE_ME_HASH', 'Lab Manager 1', 2, 'active'
+WHERE NOT EXISTS (SELECT 1 FROM smartlab.[User] WHERE Username = 'manager');
+
+INSERT INTO smartlab.[User] (Username, Email, PasswordHash, DisplayName, RoleId, AccountStatus)
+SELECT 'manager2', 'manager2@smartlab.local', 'CHANGE_ME_HASH', 'Lab Manager 2', 2, 'active'
+WHERE NOT EXISTS (SELECT 1 FROM smartlab.[User] WHERE Username = 'manager2');
+
+INSERT INTO smartlab.[User] (Username, Email, PasswordHash, DisplayName, RoleId, AccountStatus)
+SELECT 'tech', 'tech@smartlab.local', 'CHANGE_ME_HASH', 'Global Technician', 2, 'active'
+WHERE NOT EXISTS (SELECT 1 FROM smartlab.[User] WHERE Username = 'tech');
+GO
+
+INSERT INTO smartlab.Lab (LabCode, LabName, [Status], Temperature, Humidity, Co2Level, LightLevel, Occupancy, MaxOccupancy, PresenceDetected)
+SELECT 'lab-01', 'Chemistry Lab A', 'optimal', 22.5, 45, 420, 650, 8, 20, 1
+WHERE NOT EXISTS (SELECT 1 FROM smartlab.Lab WHERE LabCode = 'lab-01');
+
+INSERT INTO smartlab.Lab (LabCode, LabName, [Status], Temperature, Humidity, Co2Level, LightLevel, Occupancy, MaxOccupancy, PresenceDetected)
+SELECT 'lab-02', 'Biology Lab B', 'warning', 24.8, 62, 580, 720, 15, 20, 1
+WHERE NOT EXISTS (SELECT 1 FROM smartlab.Lab WHERE LabCode = 'lab-02');
+
+INSERT INTO smartlab.Lab (LabCode, LabName, [Status], Temperature, Humidity, Co2Level, LightLevel, Occupancy, MaxOccupancy, PresenceDetected)
+SELECT 'lab-03', 'Physics Lab C', 'optimal', 21.2, 40, 400, 880, 5, 15, 1
+WHERE NOT EXISTS (SELECT 1 FROM smartlab.Lab WHERE LabCode = 'lab-03');
+
+INSERT INTO smartlab.Lab (LabCode, LabName, [Status], Temperature, Humidity, Co2Level, LightLevel, Occupancy, MaxOccupancy, PresenceDetected)
+SELECT 'lab-04', 'Computer Lab D', 'critical', 27.5, 38, 720, 600, 18, 20, 1
+WHERE NOT EXISTS (SELECT 1 FROM smartlab.Lab WHERE LabCode = 'lab-04');
+
+INSERT INTO smartlab.Lab (LabCode, LabName, [Status], Temperature, Humidity, Co2Level, LightLevel, Occupancy, MaxOccupancy, PresenceDetected)
+SELECT 'lab-05', 'Materials Lab E', 'optimal', 23.1, 47, 430, 710, 9, 18, 1
+WHERE NOT EXISTS (SELECT 1 FROM smartlab.Lab WHERE LabCode = 'lab-05');
+
+INSERT INTO smartlab.Lab (LabCode, LabName, [Status], Temperature, Humidity, Co2Level, LightLevel, Occupancy, MaxOccupancy, PresenceDetected)
+SELECT 'lab-06', 'Electronics Lab F', 'warning', 25.2, 58, 910, 760, 13, 22, 1
+WHERE NOT EXISTS (SELECT 1 FROM smartlab.Lab WHERE LabCode = 'lab-06');
+GO
+
+INSERT INTO smartlab.UserLabAssignment (UserId, LabId)
+SELECT u.UserId, l.LabId
+FROM smartlab.[User] u
+INNER JOIN smartlab.Lab l ON l.LabCode IN ('lab-01', 'lab-02', 'lab-03')
+WHERE u.Username = 'manager'
+  AND NOT EXISTS (
+      SELECT 1 FROM smartlab.UserLabAssignment x
+      WHERE x.UserId = u.UserId AND x.LabId = l.LabId
+  );
+
+INSERT INTO smartlab.UserLabAssignment (UserId, LabId)
+SELECT u.UserId, l.LabId
+FROM smartlab.[User] u
+INNER JOIN smartlab.Lab l ON l.LabCode IN ('lab-04', 'lab-05', 'lab-06')
+WHERE u.Username = 'manager2'
+  AND NOT EXISTS (
+      SELECT 1 FROM smartlab.UserLabAssignment x
+      WHERE x.UserId = u.UserId AND x.LabId = l.LabId
+  );
+
+INSERT INTO smartlab.UserLabAssignment (UserId, LabId)
+SELECT u.UserId, l.LabId
+FROM smartlab.[User] u
+CROSS JOIN smartlab.Lab l
+WHERE u.Username = 'tech'
+  AND NOT EXISTS (
+      SELECT 1 FROM smartlab.UserLabAssignment x
+      WHERE x.UserId = u.UserId AND x.LabId = l.LabId
+  );
+GO
+
+INSERT INTO smartlab.ThresholdConfig (
+    LabId,
+    TemperatureMin, TemperatureMax, TemperatureWarningMin, TemperatureWarningMax,
+    HumidityMin, HumidityMax, HumidityWarningMin, HumidityWarningMax,
+    Co2Max, Co2WarningMax,
+    LightLevelMin, LightLevelMax,
+    UpdatedByUserId
+)
+SELECT l.LabId,
+       18, 24, 20, 23,
+       30, 60, 35, 55,
+       1000, 800,
+       300, 1000,
+       u.UserId
+FROM smartlab.Lab l
+CROSS JOIN smartlab.[User] u
+WHERE l.LabCode = 'lab-01'
+  AND u.Username = 'admin'
+  AND NOT EXISTS (SELECT 1 FROM smartlab.ThresholdConfig t WHERE t.LabId = l.LabId);
+GO

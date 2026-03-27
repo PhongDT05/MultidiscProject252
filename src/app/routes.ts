@@ -1,6 +1,10 @@
-import { createBrowserRouter } from "react-router";
+import { createBrowserRouter, redirect } from "react-router";
 
 export const router = createBrowserRouter([
+  {
+    path: "/",
+    loader: async () => redirect("/login"),
+  },
   {
     path: "/login",
     lazy: async () => {
@@ -16,7 +20,7 @@ export const router = createBrowserRouter([
     },
   },
   {
-    path: "/",
+    path: "/dashboard",
     lazy: async () => {
       const { ProtectedLayout } = await import("./components/ProtectedLayout");
       return { Component: ProtectedLayout };
@@ -72,6 +76,13 @@ export const router = createBrowserRouter([
         },
       },
       {
+        path: "change-password",
+        lazy: async () => {
+          const { ChangePassword } = await import("./components/ChangePassword.tsx");
+          return { Component: ChangePassword };
+        },
+      },
+      {
         path: "*",
         lazy: async () => {
           const { NotFound } = await import("./components/NotFound");
@@ -79,5 +90,12 @@ export const router = createBrowserRouter([
         },
       },
     ],
+  },
+  {
+    path: "*",
+    lazy: async () => {
+      const { NotFound } = await import("./components/NotFound");
+      return { Component: NotFound };
+    },
   },
 ]);

@@ -38,15 +38,20 @@
 ### Routing Structure
 
 ```
-/ (Root Layout)
-├── / (Main Dashboard - Index)
-├── /room/:roomId (Room Detail View)
-└── /* (404 Not Found)
+/ (Entry Redirect)
+├── /login (Login Module)
+├── /unauthorized (Unauthorized View)
+├── /dashboard (Protected Layout)
+│   ├── /dashboard (Main Dashboard - Index)
+│   ├── /dashboard/room/:roomId (Room Detail View)
+│   └── /dashboard/* (Protected 404)
+└── /* (Global 404 Not Found)
 ```
 
 **Navigation Pattern**: 
-- Nested routing with shared Root layout
-- Root layout provides persistent header/navigation
+- Login-first entry flow via `/` redirecting to `/login`
+- Protected content is grouped under `/dashboard`
+- Shared Root layout is mounted only for authenticated routes
 - Child routes render in `<Outlet />` component
 
 ---
@@ -103,7 +108,19 @@
 
 ## Component Modules
 
-### Module 1: Root Layout Component (`Root.tsx`)
+### Module 1: Login Module (`Login.tsx`)
+
+**Purpose**: Enforce authentication as the first user interaction before any dashboard content.
+
+**Key Features**:
+- Username/password authentication flow
+- Error messaging for invalid credentials
+- Loading state during sign-in
+- Redirect to `/dashboard` on successful login
+
+---
+
+### Module 2: Root Layout Component (`Root.tsx`)
 
 **Purpose**: Provides shared header navigation and layout wrapper
 
@@ -143,7 +160,7 @@
 
 ---
 
-### Module 2: Main Dashboard Component (`MainDashboard.tsx`)
+### Module 3: Main Dashboard Component (`MainDashboard.tsx`)
 
 **Purpose**: Overview of all labs with aggregate metrics and individual lab cards
 

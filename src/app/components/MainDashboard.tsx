@@ -140,7 +140,7 @@ export function MainDashboard() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <Link
-              to="/users"
+              to="/dashboard/users"
               className="flex items-center gap-3 p-3 bg-white rounded-lg border border-purple-200 hover:shadow-md transition-all group"
             >
               <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center">
@@ -154,7 +154,7 @@ export function MainDashboard() {
               </div>
             </Link>
             <Link
-              to="/thresholds"
+              to="/dashboard/thresholds"
               className="flex items-center gap-3 p-3 bg-white rounded-lg border border-purple-200 hover:shadow-md transition-all group"
             >
               <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center">
@@ -235,7 +235,7 @@ export function MainDashboard() {
                           .map((room) => (
                             <Link
                               key={room.id}
-                              to={`/room/${room.id}`}
+                              to={`/dashboard/room/${room.id}`}
                               className="block text-sm text-slate-700 hover:text-blue-600 hover:underline"
                             >
                               • {room.name}
@@ -258,7 +258,7 @@ export function MainDashboard() {
                           .map((room) => (
                             <Link
                               key={room.id}
-                              to={`/room/${room.id}`}
+                              to={`/dashboard/room/${room.id}`}
                               className="block text-sm text-slate-700 hover:text-blue-600 hover:underline"
                             >
                               • {room.name}
@@ -281,7 +281,7 @@ export function MainDashboard() {
                           .map((room) => (
                             <Link
                               key={room.id}
-                              to={`/room/${room.id}`}
+                              to={`/dashboard/room/${room.id}`}
                               className="block text-sm text-slate-700 hover:text-blue-600 hover:underline"
                             >
                               • {room.name}
@@ -371,7 +371,7 @@ export function MainDashboard() {
             return (
               <Link
                 key={room.id}
-                to={`/room/${room.id}`}
+                to={`/dashboard/room/${room.id}`}
                 className={`bg-white rounded-lg shadow-sm border border-slate-200 p-6 hover:shadow-md transition-shadow ${
                   !isAccessible ? 'opacity-50 pointer-events-none' : ''
                 }`}
@@ -382,7 +382,9 @@ export function MainDashboard() {
                     <div className="flex items-center gap-2">
                       <h3 className="text-lg font-semibold text-slate-900">{room.name}</h3>
                       {!isAccessible && (
-                        <Lock className="w-4 h-4 text-slate-400" title="No access" />
+                        <span title="No access">
+                          <Lock className="w-4 h-4 text-slate-400" />
+                        </span>
                       )}
                     </div>
                     <div className="flex items-center gap-2 mt-1">

@@ -90,6 +90,7 @@ const createEquipmentWithDefaults = (data: Partial<Equipment>): Equipment => {
 };
 
 const defaultAccounts: AuthAccount[] = [
+  // ============ ADMINISTRATORS ============
   {
     id: '1',
     username: 'admin',
@@ -97,31 +98,31 @@ const defaultAccounts: AuthAccount[] = [
     name: 'Dr. Sarah Chen',
     role: 'admin',
     status: 'active',
-    lastLogin: '2026-03-18 09:15',
+    lastLogin: '2026-03-27 14:32',
     password: 'admin123',
   },
   {
-    id: '2',
-    username: 'manager',
-    email: 'manager@smartlab.com',
-    name: 'John Martinez',
-    role: 'technician',
+    id: '101',
+    username: 'sysadmin',
+    email: 'sysadmin@smartlab.com',
+    name: 'Michael Torres',
+    role: 'admin',
     status: 'active',
-    lastLogin: '2026-03-18 08:45',
-    password: 'manager123',
-    assignedLabs: ['lab-01', 'lab-02', 'lab-03'],
+    lastLogin: '2026-03-26 16:45',
+    password: 'sysadmin123',
   },
   {
-    id: '5',
-    username: 'manager2',
-    email: 'manager2@smartlab.com',
-    name: 'Lisa Anderson',
-    role: 'technician',
+    id: '102',
+    username: 'labdirector',
+    email: 'director@smartlab.com',
+    name: 'Prof. Rebecca Williams',
+    role: 'admin',
     status: 'active',
-    lastLogin: '2026-03-18 08:12',
-    password: 'manager123',
-    assignedLabs: ['lab-04', 'lab-05', 'lab-06'],
+    lastLogin: '2026-03-27 09:00',
+    password: 'director123',
   },
+
+  // ============ TECHNICIANS (GLOBAL SCOPE) ============
   {
     id: '3',
     username: 'tech',
@@ -129,8 +130,133 @@ const defaultAccounts: AuthAccount[] = [
     name: 'Emily Watson',
     role: 'technician',
     status: 'active',
-    lastLogin: '2026-03-18 07:30',
+    lastLogin: '2026-03-27 13:20',
     password: 'tech123',
+  },
+  {
+    id: '201',
+    username: 'maintenance',
+    email: 'maintenance@smartlab.com',
+    name: 'David Park',
+    role: 'technician',
+    status: 'active',
+    lastLogin: '2026-03-27 10:15',
+    password: 'maintenance123',
+  },
+  {
+    id: '202',
+    username: 'supervisor',
+    email: 'supervisor@smartlab.com',
+    name: 'Maria Rodriguez',
+    role: 'technician',
+    status: 'active',
+    lastLogin: '2026-03-25 15:30',
+    password: 'supervisor123',
+  },
+
+  // ============ TECHNICIANS (LABS 1-3) ============
+  {
+    id: '2',
+    username: 'manager',
+    email: 'manager@smartlab.com',
+    name: 'John Martinez',
+    role: 'technician',
+    status: 'active',
+    lastLogin: '2026-03-27 11:45',
+    password: 'manager123',
+    assignedLabs: ['lab-01', 'lab-02', 'lab-03'],
+  },
+  {
+    id: '203',
+    username: 'tech_chembio',
+    email: 'tech.chembio@smartlab.com',
+    name: 'Kevin O\'Brien',
+    role: 'technician',
+    status: 'active',
+    lastLogin: '2026-03-27 08:30',
+    password: 'chembio123',
+    assignedLabs: ['lab-01', 'lab-02', 'lab-03'],
+  },
+  {
+    id: '204',
+    username: 'asst_tech1',
+    email: 'assistant.tech1@smartlab.com',
+    name: 'Priya Patel',
+    role: 'technician',
+    status: 'active',
+    lastLogin: '2026-03-26 14:00',
+    password: 'asst123',
+    assignedLabs: ['lab-01', 'lab-02', 'lab-03'],
+  },
+
+  // ============ TECHNICIANS (LABS 4-6) ============
+  {
+    id: '5',
+    username: 'manager2',
+    email: 'manager2@smartlab.com',
+    name: 'Lisa Anderson',
+    role: 'technician',
+    status: 'active',
+    lastLogin: '2026-03-27 12:10',
+    password: 'manager123',
+    assignedLabs: ['lab-04', 'lab-05', 'lab-06'],
+  },
+  {
+    id: '205',
+    username: 'tech_physics',
+    email: 'tech.physics@smartlab.com',
+    name: 'James Cohen',
+    role: 'technician',
+    status: 'active',
+    lastLogin: '2026-03-27 09:45',
+    password: 'physics123',
+    assignedLabs: ['lab-04', 'lab-05', 'lab-06'],
+  },
+  {
+    id: '206',
+    username: 'asst_tech2',
+    email: 'assistant.tech2@smartlab.com',
+    name: 'Sarah Kim',
+    role: 'technician',
+    status: 'inactive',
+    lastLogin: '2026-03-15 10:20',
+    password: 'asst456',
+    assignedLabs: ['lab-04', 'lab-05', 'lab-06'],
+  },
+
+  // ============ TECHNICIANS (SINGLE LAB ASSIGNMENT) ============
+  {
+    id: '207',
+    username: 'lab1_specialist',
+    email: 'specialist.lab1@smartlab.com',
+    name: 'Ahmed Hassan',
+    role: 'technician',
+    status: 'active',
+    lastLogin: '2026-03-24 11:00',
+    password: 'lab1spec123',
+    assignedLabs: ['lab-01'],
+  },
+  {
+    id: '208',
+    username: 'lab3_specialist',
+    email: 'specialist.lab3@smartlab.com',
+    name: 'Elena Vasquez',
+    role: 'technician',
+    status: 'active',
+    lastLogin: '2026-03-23 13:30',
+    password: 'lab3spec123',
+    assignedLabs: ['lab-03'],
+  },
+  {
+    id: '209',
+    username: 'lab6_specialist',
+    email: 'specialist.lab6@smartlab.com',
+    name: 'Yuki Tanaka',
+    role: 'technician',
+    status: 'active',
+    lastLogin: '2026-03-20 09:15',
+    password: 'lab6spec123',
+    assignedLabs: ['lab-06'],
   },
 ];
 
@@ -318,6 +444,82 @@ export const appApi = {
   async clearSession(): Promise<void> {
     await sleep(120);
     localStorage.removeItem(SESSION_KEY);
+  },
+
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<{ success: boolean; error?: string }> {
+    await sleep(300);
+
+    if (!currentPassword.trim()) {
+      return { success: false, error: 'Current password is required.' };
+    }
+
+    if (newPassword.length < 6) {
+      return { success: false, error: 'New password must be at least 6 characters.' };
+    }
+
+    const accounts = readAccounts();
+    const account = accounts.find((item) => item.id === userId);
+
+    if (!account) {
+      return { success: false, error: 'User account not found.' };
+    }
+
+    if (account.password !== currentPassword) {
+      return { success: false, error: 'Current password is incorrect.' };
+    }
+
+    const updatedAccounts = accounts.map((item) =>
+      item.id === userId
+        ? {
+            ...item,
+            password: newPassword,
+          }
+        : item,
+    );
+
+    writeAccounts(updatedAccounts);
+    return { success: true };
+  },
+
+  async resetUserPassword(
+    userId: string,
+    adminUserId: string,
+  ): Promise<{ success: boolean; error?: string; newPassword?: string }> {
+    await sleep(300);
+
+    const accounts = readAccounts();
+    const adminAccount = accounts.find((item) => item.id === adminUserId);
+
+    if (!adminAccount || adminAccount.role !== 'admin') {
+      return { success: false, error: 'Only admins can reset passwords.' };
+    }
+
+    const targetAccount = accounts.find((item) => item.id === userId);
+
+    if (!targetAccount) {
+      return { success: false, error: 'User account not found.' };
+    }
+
+    if (userId === adminUserId) {
+      return { success: false, error: 'Cannot reset your own password. Use Change Password instead.' };
+    }
+
+    const newPassword = 'smartlab123';
+    const updatedAccounts = accounts.map((item) =>
+      item.id === userId
+        ? {
+            ...item,
+            password: newPassword,
+          }
+        : item,
+    );
+
+    writeAccounts(updatedAccounts);
+    return { success: true, newPassword };
   },
 
   // Device creation helpers (exported for use in other services and context)
