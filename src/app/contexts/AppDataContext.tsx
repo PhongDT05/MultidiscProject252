@@ -1,6 +1,11 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { labRooms, type LabRoom, type Alert, type IoTDevice, type Equipment, type Actuator } from '../data/labData';
 import { appApi } from '../services/appApi';
+import {
+  mqttTelemetryEnabled,
+  subscribeMqttTelemetry,
+  type MqttTelemetryMessage,
+} from '../services/mqttTelemetry';
 import type { ManagedUser } from '../types/auth';
 
 export type { ManagedUser };
@@ -27,6 +32,247 @@ interface AppDataContextType {
 const isTemperatureOptimal = (value: number) => value >= 20 && value <= 24;
 const isHumidityOptimal = (value: number) => value >= 40 && value <= 60;
 const isCO2Optimal = (value: number) => value < 500;
+const mqttLabId = import.meta.env.VITE_MQTT_LAB_ID?.toString() ?? 'lab-01';
+const mqttTemperatureEpsilon = Number(import.meta.env.VITE_MQTT_TEMP_EPSILON ?? '0.1');
+const mqttHumidityEpsilon = Number(import.meta.env.VITE_MQTT_HUMIDITY_EPSILON ?? '1');
+const mqttLightEpsilon = Number(import.meta.env.VITE_MQTT_LIGHT_EPSILON ?? '5');
+const mqttAirEpsilon = Number(import.meta.env.VITE_MQTT_AIR_EPSILON ?? '5');
+
+const hasSignificantChange = (
+  currentValue: number,
+  nextValue: number,
+  epsilon: number,
+) => Math.abs(currentValue - nextValue) >= Math.max(0, epsilon);
+
+const parseNumberPayload = (payload: string): number | null => {
+  const value = Number(payload);
+  return Number.isFinite(value) ? value : null;
+};
+
+const parseBooleanPayload = (payload: string): boolean | null => {
+  const normalized = payload.trim().toLowerCase();
+  if (['1', 'true', 'on', 'yes', 'detected'].includes(normalized)) return true;
+  if (['0', 'false', 'off', 'no', 'none', 'clear'].includes(normalized)) return false;
+  return null;
+};
+
+const parseModePayload = (payload: string): 'auto' | 'manual' | null => {
+  const normalized = payload.trim().toLowerCase();
+  if (normalized === 'auto') return 'auto';
+  if (normalized === 'manual') return 'manual';
+  return null;
+};
+
+const alertTopicMap: Record<string, { reasonCode: string; field: string }> = {
+  'esp32SLG4/alertst': { reasonCode: 'TEMP_THRESHOLD', field: 'temperature' },
+  'esp32SLG4/alertsh': { reasonCode: 'HUMIDITY_THRESHOLD', field: 'humidity' },
+  'esp32SLG4/alertsl': { reasonCode: 'LIGHT_THRESHOLD', field: 'light' },
+  'esp32SLG4/alertsa': { reasonCode: 'AIR_THRESHOLD', field: 'air' },
+};
+
+const parseSensorHealthStatus = (
+  payload: string,
+): IoTDevice['status'] | null => {
+  const normalized = payload.trim().toLowerCase();
+  if (['online', 'ok', 'healthy', '1', 'true'].includes(normalized)) return 'online';
+  if (['warning', 'degraded'].includes(normalized)) return 'warning';
+  if (['offline', '0', 'false'].includes(normalized)) return 'offline';
+  if (['error', 'failed'].includes(normalized)) return 'error';
+  return null;
+};
+
+const sensorTopicNameMap: Record<string, string> = {
+  oled: 'OLED Display',
+  dht: 'DHT Sensor',
+  bh1750: 'BH1750 Light Sensor',
+  radar: 'Radar Presence Sensor',
+  mq135: 'MQ135 Air Sensor',
+};
+
+const MAX_ALERTS_PER_ROOM = 100;
+const EVENT_LIKE_TOPICS = new Set<string>([
+  'esp32SLG4/commands',
+  'esp32SLG4/alertst',
+  'esp32SLG4/alertsh',
+  'esp32SLG4/alertsl',
+  'esp32SLG4/alertsa',
+]);
+
+const upsertAlertFromTopic = (room: LabRoom, topic: string, payload: string): LabRoom => {
+  const alertMeta = alertTopicMap[topic];
+  if (!alertMeta) return room;
+
+  const active = parseBooleanPayload(payload);
+  const shouldRaise = active ?? payload.length > 0;
+
+  if (!shouldRaise) {
+    return room;
+  }
+
+  const existing = room.alerts.find(
+    (alert) => alert.reasonCode === alertMeta.reasonCode && !alert.acknowledged,
+  );
+
+  if (existing) {
+    return room;
+  }
+
+  const now = new Date().toISOString();
+  const newAlert: Alert = {
+    id: `mqtt-alert-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+    type: 'warning',
+    severity: 'medium',
+    message: `Threshold alert on ${alertMeta.field}${payload ? `: ${payload}` : ''}`,
+    reasonCode: alertMeta.reasonCode,
+    timestamp: now,
+    acknowledged: false,
+    autoResolved: false,
+    roomId: room.id,
+  };
+
+  return {
+    ...room,
+    alerts: [newAlert, ...room.alerts].slice(0, MAX_ALERTS_PER_ROOM),
+  };
+};
+
+const applyMqttMessageToRoom = (room: LabRoom, message: MqttTelemetryMessage): LabRoom => {
+  let nextRoom = room;
+
+  switch (message.topic) {
+    case 'esp32SLG4/presence': {
+      const value = parseBooleanPayload(message.payload);
+      if (value === null) return room;
+      if (nextRoom.presenceDetected === value) return room;
+      nextRoom = { ...nextRoom, presenceDetected: value };
+      break;
+    }
+    case 'esp32SLG4/mode': {
+      const mode = parseModePayload(message.payload);
+      if (!mode) return room;
+      const hasEquipmentModeChange = nextRoom.equipment.some((item) => item.mode !== mode);
+      const hasActuatorModeChange = nextRoom.actuators.some((item) => item.mode !== mode);
+      if (!hasEquipmentModeChange && !hasActuatorModeChange) return room;
+      nextRoom = {
+        ...nextRoom,
+        equipment: nextRoom.equipment.map((item) => ({ ...item, mode })),
+        actuators: nextRoom.actuators.map((item) => ({ ...item, mode })),
+      };
+      break;
+    }
+    case 'esp32SLG4/temperate': {
+      const value = parseNumberPayload(message.payload);
+      if (value === null) return room;
+      if (!hasSignificantChange(nextRoom.temperature, value, mqttTemperatureEpsilon)) return room;
+      nextRoom = { ...nextRoom, temperature: value };
+      break;
+    }
+    case 'esp32SLG4/humidity': {
+      const value = parseNumberPayload(message.payload);
+      if (value === null) return room;
+      if (!hasSignificantChange(nextRoom.humidity, value, mqttHumidityEpsilon)) return room;
+      nextRoom = { ...nextRoom, humidity: value };
+      break;
+    }
+    case 'esp32SLG4/light': {
+      const value = parseNumberPayload(message.payload);
+      if (value === null) return room;
+      if (!hasSignificantChange(nextRoom.lightLevel, value, mqttLightEpsilon)) return room;
+      nextRoom = { ...nextRoom, lightLevel: value };
+      break;
+    }
+    case 'esp32SLG4/air': {
+      const value = parseNumberPayload(message.payload);
+      if (value === null) return room;
+      if (!hasSignificantChange(nextRoom.co2Level, value, mqttAirEpsilon)) return room;
+      nextRoom = { ...nextRoom, co2Level: value };
+      break;
+    }
+    case 'esp32SLG4/counter': {
+      const value = parseNumberPayload(message.payload);
+      if (value === null) return room;
+      const rounded = Math.max(0, Math.round(value));
+      const nextOccupancy = Math.min(nextRoom.maxOccupancy, rounded);
+      if (nextRoom.occupancy === nextOccupancy) return room;
+      nextRoom = {
+        ...nextRoom,
+        occupancy: nextOccupancy,
+      };
+      break;
+    }
+    case 'esp32SLG4/commands': {
+      const commandAlert: Alert = {
+        id: `mqtt-cmd-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+        type: 'info',
+        severity: 'low',
+        message: `Command received: ${message.payload || 'n/a'}`,
+        reasonCode: 'MQTT_COMMAND',
+        timestamp: new Date().toISOString(),
+        acknowledged: false,
+        autoResolved: false,
+        roomId: nextRoom.id,
+      };
+
+      nextRoom = {
+        ...nextRoom,
+        alerts: [
+          commandAlert,
+          ...nextRoom.alerts,
+        ].slice(0, MAX_ALERTS_PER_ROOM),
+      };
+      break;
+    }
+    default:
+      if (message.topic.startsWith('esp32SLG4/status/')) {
+        const sensorKey = message.topic.split('/').pop() ?? '';
+        const mappedName = sensorTopicNameMap[sensorKey] ?? sensorKey.toUpperCase();
+        const nextStatus = parseSensorHealthStatus(message.payload);
+        if (!nextStatus) return room;
+
+        const existingDevice = nextRoom.iotDevices.find((item) => item.name === mappedName);
+        if (existingDevice) {
+          if (existingDevice.status === nextStatus) {
+            return room;
+          }
+          nextRoom = {
+            ...nextRoom,
+            iotDevices: nextRoom.iotDevices.map((item) =>
+              item.name === mappedName
+                ? { ...item, status: nextStatus, lastSeen: message.receivedAt }
+                : item,
+            ),
+          };
+        } else {
+          nextRoom = {
+            ...nextRoom,
+            iotDevices: [
+              ...nextRoom.iotDevices,
+              {
+                id: `iot-${sensorKey}-${Date.now()}`,
+                name: mappedName,
+                type: 'sensor',
+                status: nextStatus,
+                lastSeen: message.receivedAt,
+                signalStrength: 100,
+                firmwareVersion: 'mqtt-live',
+                dataRate: 1,
+                location: 'MQTT source',
+              },
+            ],
+          };
+        }
+      }
+      break;
+  }
+
+  nextRoom = upsertAlertFromTopic(nextRoom, message.topic, message.payload);
+  return applyDerivedStatus(nextRoom);
+};
+
+const applyMqttMessagesToRoom = (
+  room: LabRoom,
+  messages: MqttTelemetryMessage[],
+): LabRoom => messages.reduce((nextRoom, message) => applyMqttMessageToRoom(nextRoom, message), room);
 
 const applyDerivedStatus = (room: LabRoom): LabRoom => {
   const warningCount = [
@@ -63,6 +309,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const mqttMessageQueueRef = useRef<MqttTelemetryMessage[]>([]);
+  const mqttFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mqttLastPayloadByTopicRef = useRef<Record<string, string>>({});
 
   useEffect(() => {
     let isMounted = true;
@@ -93,6 +342,64 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
     return () => {
       isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!mqttTelemetryEnabled()) {
+      return;
+    }
+
+    const unsubscribe = subscribeMqttTelemetry({
+      onConnect: () => {
+        setError(null);
+      },
+      onError: (nextError) => {
+        setError(nextError);
+      },
+      onMessage: (message) => {
+        const shouldAlwaysProcess =
+          EVENT_LIKE_TOPICS.has(message.topic) || message.topic.startsWith('esp32SLG4/status/');
+        if (!shouldAlwaysProcess) {
+          const previousPayload = mqttLastPayloadByTopicRef.current[message.topic];
+          if (previousPayload === message.payload) {
+            return;
+          }
+          mqttLastPayloadByTopicRef.current[message.topic] = message.payload;
+        }
+
+        mqttMessageQueueRef.current.push(message);
+
+        if (mqttFlushTimerRef.current) {
+          return;
+        }
+
+        mqttFlushTimerRef.current = setTimeout(() => {
+          const queuedMessages = mqttMessageQueueRef.current;
+          mqttMessageQueueRef.current = [];
+          mqttFlushTimerRef.current = null;
+
+          if (queuedMessages.length === 0) {
+            return;
+          }
+
+          setLabs((prev) =>
+            prev.map((room) =>
+              room.id === mqttLabId ? applyMqttMessagesToRoom(room, queuedMessages) : room,
+            ),
+          );
+        }, 200);
+      },
+    });
+
+    return () => {
+      if (mqttFlushTimerRef.current) {
+        clearTimeout(mqttFlushTimerRef.current);
+        mqttFlushTimerRef.current = null;
+      }
+      mqttMessageQueueRef.current = [];
+      mqttLastPayloadByTopicRef.current = {};
+      unsubscribe();
     };
   }, []);
 

@@ -1,0 +1,48 @@
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: smartlab-sqlserver
+    # Run as root in local dev to avoid volume permission issues on some Docker Desktop/WSL setups.
+    user: "0:0"
+    environment:
+      ACCEPT_EULA: 'Y'
+      SA_PASSWORD: 'SmartLab@2026!'
+      MSSQL_PID: 'Developer'
+    ports:
+      - "11433:1433"
+    volumes:
+      # Persist database files across container restarts
+      - sqlserver-data:/var/opt/mssql/data
+      # Mount schema/seed scripts for easy execution
+      - ./database/sqlserver:/scripts:ro
+    networks:
+      - smartlab-network
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'SmartLab@2026!' -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 40s
+    restart: unless-stopped
+
+  # Optional: SQL Server Tools container for running scripts
+  sqltools:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: smartlab-sqltools
+    profiles:
+      - tools
+    entrypoint: /bin/bash
+    command: -c "sleep infinity"
+    volumes:
+      - ./database/sqlserver:/scripts:ro
+    networks:
+      - smartlab-network
+    restart: unless-stopped
+
+volumes:
+  sqlserver-data:
+    driver: local
+
+networks:
+  smartlab-network:
+    driver: bridge

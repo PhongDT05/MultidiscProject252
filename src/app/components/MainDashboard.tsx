@@ -25,6 +25,9 @@ export function MainDashboard() {
   const { user, hasPermission, hasAnyPermission, canAccessLab } = useAuth();
   const { labs, isLoading, error } = useAppData();
   const [showLabDetails, setShowLabDetails] = useState(false);
+  const mqttEnabled = import.meta.env.VITE_ENABLE_MQTT?.toString().toLowerCase() === 'true';
+  const simulatorEnabled =
+    !mqttEnabled && import.meta.env.VITE_ENABLE_SIMULATOR?.toString().toLowerCase() !== 'false';
   
   // Filter labs based on user access
   const accessibleLabs = labs.filter(lab => canAccessLab(lab.id));
@@ -99,8 +102,8 @@ export function MainDashboard() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      {/* Data Simulator - runs in background */}
-      <DataSimulator />
+      {/* Keep simulation disabled when live MQTT ingestion is active. */}
+      {simulatorEnabled && <DataSimulator />}
 
       {isLoading && (
         <div className="mb-6 bg-white border border-slate-200 rounded-lg p-4 text-sm text-slate-600">
@@ -128,7 +131,7 @@ export function MainDashboard() {
           </div>
         </div>
       )}
-      
+
       {/* Admin Quick Access Panel */}
       {hasPermission('admin') && (
         <div className="mb-6 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-200 p-4">
@@ -170,7 +173,7 @@ export function MainDashboard() {
           </div>
         </div>
       )}
-
+      
       {/* Overview Stats */}
       {hasPermission('technician') && (
         <div className="mb-8">
