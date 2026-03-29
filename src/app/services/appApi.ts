@@ -1,11 +1,13 @@
 import { labRooms, type LabRoom, type IoTDevice, type Equipment } from '../data/labData';
 import type { AuthAccount, ManagedUser, User } from '../types/auth';
+import { backendApi } from './backendApi';
 
 const LABS_KEY = 'smartlab_api_labs';
 const USERS_KEY = 'smartlab_api_users';
 const SESSION_KEY = 'smartlab_user';
 
 const API_DELAY_MS = 250;
+const useBackendApi = import.meta.env.VITE_USE_BACKEND_API?.toString().toLowerCase() === 'true';
 
 const cloneInitialLabs = (): LabRoom[] =>
   labRooms.map((room) => ({
@@ -343,6 +345,9 @@ const writeAccounts = (accounts: AuthAccount[]) => {
 
 export const appApi = {
   async getLabs(): Promise<LabRoom[]> {
+    if (useBackendApi) {
+      return backendApi.getLabs();
+    }
     ensureSeedData();
     await sleep();
     const parsed = parseJson<LabRoom[]>(localStorage.getItem(LABS_KEY));
@@ -358,6 +363,10 @@ export const appApi = {
   },
 
   async saveLabs(labs: LabRoom[]): Promise<void> {
+    if (useBackendApi) {
+      await backendApi.saveLabs(labs);
+      return;
+    }
     await sleep();
     localStorage.setItem(LABS_KEY, JSON.stringify(normalizeLabs(labs)));
   },
@@ -369,11 +378,18 @@ export const appApi = {
   },
 
   async getManagedUsers(): Promise<ManagedUser[]> {
+    if (useBackendApi) {
+      return backendApi.getManagedUsers();
+    }
     await sleep();
     return readAccounts().map(({ password: _password, assignedLabs: _assignedLabs, ...user }) => user);
   },
 
   async createManagedUser(user: ManagedUser): Promise<void> {
+    if (useBackendApi) {
+      await backendApi.createManagedUser(user);
+      return;
+    }
     await sleep();
     const accounts = readAccounts();
     const baseUsername = (user.username || usernameFromEmail(user.email)).toLowerCase();
@@ -396,6 +412,10 @@ export const appApi = {
   },
 
   async updateManagedUser(userId: string, updates: Partial<ManagedUser>): Promise<void> {
+    if (useBackendApi) {
+      await backendApi.updateManagedUser(userId, updates);
+      return;
+    }
     await sleep();
     const accounts = readAccounts().map((account) => {
       if (account.id !== userId) return account;
@@ -410,12 +430,23 @@ export const appApi = {
   },
 
   async deleteManagedUser(userId: string): Promise<void> {
+    if (useBackendApi) {
+      await backendApi.deleteManagedUser(userId);
+      return;
+    }
     await sleep();
     const accounts = readAccounts().filter((account) => account.id !== userId);
     writeAccounts(accounts);
   },
 
   async authenticate(username: string, password: string): Promise<User | null> {
+    if (useBackendApi) {
+      const user = await backendApi.authenticate(username, password);
+      if (user) {
+        localStorage.setItem(SESSION_KEY, JSON.stringify(user));
+      }
+      return user;
+    }
     await sleep(500);
     const normalizedUsername = username.trim().toLowerCase();
     const account = readAccounts().find((item) => item.username?.toLowerCase() === normalizedUsername);
@@ -451,6 +482,9 @@ export const appApi = {
     currentPassword: string,
     newPassword: string,
   ): Promise<{ success: boolean; error?: string }> {
+    if (useBackendApi) {
+      return backendApi.changePassword(userId, currentPassword, newPassword);
+    }
     await sleep(300);
 
     if (!currentPassword.trim()) {
@@ -489,6 +523,9 @@ export const appApi = {
     userId: string,
     adminUserId: string,
   ): Promise<{ success: boolean; error?: string; newPassword?: string }> {
+    if (useBackendApi) {
+      return backendApi.resetUserPassword(userId, adminUserId);
+    }
     await sleep(300);
 
     const accounts = readAccounts();

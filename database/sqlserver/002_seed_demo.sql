@@ -20,20 +20,44 @@ WHEN NOT MATCHED THEN
 GO
 
 INSERT INTO smartlab.[User] (Username, Email, PasswordHash, DisplayName, RoleId, AccountStatus)
-SELECT 'admin', 'admin@smartlab.local', 'CHANGE_ME_HASH', 'System Admin', 1, 'active'
+SELECT 'admin', 'admin@smartlab.local', 'admin123', 'System Admin', 1, 'active'
 WHERE NOT EXISTS (SELECT 1 FROM smartlab.[User] WHERE Username = 'admin');
 
 INSERT INTO smartlab.[User] (Username, Email, PasswordHash, DisplayName, RoleId, AccountStatus)
-SELECT 'manager', 'manager@smartlab.local', 'CHANGE_ME_HASH', 'Lab Manager 1', 2, 'active'
+SELECT 'manager', 'manager@smartlab.local', 'manager123', 'Lab Manager 1', 2, 'active'
 WHERE NOT EXISTS (SELECT 1 FROM smartlab.[User] WHERE Username = 'manager');
 
 INSERT INTO smartlab.[User] (Username, Email, PasswordHash, DisplayName, RoleId, AccountStatus)
-SELECT 'manager2', 'manager2@smartlab.local', 'CHANGE_ME_HASH', 'Lab Manager 2', 2, 'active'
+SELECT 'manager2', 'manager2@smartlab.local', 'manager123', 'Lab Manager 2', 2, 'active'
 WHERE NOT EXISTS (SELECT 1 FROM smartlab.[User] WHERE Username = 'manager2');
 
 INSERT INTO smartlab.[User] (Username, Email, PasswordHash, DisplayName, RoleId, AccountStatus)
-SELECT 'tech', 'tech@smartlab.local', 'CHANGE_ME_HASH', 'Global Technician', 2, 'active'
+SELECT 'tech', 'tech@smartlab.local', 'tech123', 'Global Technician', 2, 'active'
 WHERE NOT EXISTS (SELECT 1 FROM smartlab.[User] WHERE Username = 'tech');
+
+UPDATE smartlab.[User]
+SET PasswordHash = 'admin123',
+    AccountStatus = 'active',
+    UpdatedAt = SYSUTCDATETIME()
+WHERE Username = 'admin';
+
+UPDATE smartlab.[User]
+SET PasswordHash = 'manager123',
+    AccountStatus = 'active',
+    UpdatedAt = SYSUTCDATETIME()
+WHERE Username = 'manager';
+
+UPDATE smartlab.[User]
+SET PasswordHash = 'manager123',
+    AccountStatus = 'active',
+    UpdatedAt = SYSUTCDATETIME()
+WHERE Username = 'manager2';
+
+UPDATE smartlab.[User]
+SET PasswordHash = 'tech123',
+    AccountStatus = 'active',
+    UpdatedAt = SYSUTCDATETIME()
+WHERE Username = 'tech';
 GO
 
 INSERT INTO smartlab.Lab (LabCode, LabName, [Status], Temperature, Humidity, Co2Level, LightLevel, Occupancy, MaxOccupancy, PresenceDetected)

@@ -19,6 +19,32 @@
 
   3. Open http://localhost:5173/
 
+  ## SQL-Backed App Mode (Actual DB Persistence)
+
+  By default, frontend uses localStorage demo mode. To persist app data in SQL Server:
+
+  1. Start SQL Server Docker container and load schema + seed scripts (see [database/DOCKER_DBEAVER_SETUP.md](database/DOCKER_DBEAVER_SETUP.md)).
+  2. Set in `.env`:
+     - `VITE_USE_BACKEND_API=true`
+     - `VITE_API_BASE_URL=http://localhost:4000`
+  3. Start API server:
+
+    ```bash
+    npm run dev:api
+    ```
+
+  4. In another terminal start frontend:
+
+    ```bash
+    npm run dev
+    ```
+
+  5. Login with seeded accounts (for now plaintext demo passwords):
+     - `admin / admin123`
+     - `manager / manager123`
+     - `manager2 / manager123`
+     - `tech / tech123`
+
   ## Live MQTT Integration (ESP32)
 
   This project now supports live MQTT ingestion from your ESP32 topics:
