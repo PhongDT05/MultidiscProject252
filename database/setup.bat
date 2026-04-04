@@ -68,6 +68,7 @@ goto menu
 echo.
 echo Creating SmartLabDb database...
 docker exec smartlab-sqlserver /opt/mssql-tools18/bin/sqlcmd ^
+  -C ^
   -S localhost ^
   -U sa ^
   -P "SmartLab@2026!" ^
@@ -82,6 +83,7 @@ echo.
 echo Loading schema (001_schema.sql)...
 docker cp database\sqlserver\001_schema.sql smartlab-sqlserver:/schema.sql
 docker exec smartlab-sqlserver /opt/mssql-tools18/bin/sqlcmd ^
+  -C ^
   -S localhost ^
   -U sa ^
   -P "SmartLab@2026!" ^
@@ -97,6 +99,7 @@ echo.
 echo Loading seed data (002_seed_demo.sql)...
 docker cp database\sqlserver\002_seed_demo.sql smartlab-sqlserver:/seed.sql
 docker exec smartlab-sqlserver /opt/mssql-tools18/bin/sqlcmd ^
+  -C ^
   -S localhost ^
   -U sa ^
   -P "SmartLab@2026!" ^
@@ -126,6 +129,7 @@ timeout /t 30 /nobreak
 echo.
 echo Creating database...
 docker exec smartlab-sqlserver /opt/mssql-tools18/bin/sqlcmd ^
+  -C ^
   -S localhost ^
   -U sa ^
   -P "SmartLab@2026!" ^
@@ -134,6 +138,7 @@ echo.
 echo Loading schema...
 docker cp database\sqlserver\001_schema.sql smartlab-sqlserver:/schema.sql
 docker exec smartlab-sqlserver /opt/mssql-tools18/bin/sqlcmd ^
+  -C ^
   -S localhost ^
   -U sa ^
   -P "SmartLab@2026!" ^
@@ -143,6 +148,7 @@ echo.
 echo Loading seed data...
 docker cp database\sqlserver\002_seed_demo.sql smartlab-sqlserver:/seed.sql
 docker exec smartlab-sqlserver /opt/mssql-tools18/bin/sqlcmd ^
+  -C ^
   -S localhost ^
   -U sa ^
   -P "SmartLab@2026!" ^
@@ -157,6 +163,7 @@ goto menu
 echo.
 echo Testing database connection...
 docker exec smartlab-sqlserver /opt/mssql-tools18/bin/sqlcmd ^
+  -C ^
   -S localhost ^
   -U sa ^
   -P "SmartLab@2026!" ^

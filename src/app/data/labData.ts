@@ -172,25 +172,10 @@ export const labRooms: LabRoom[] = [
     occupancy: 8,
     maxOccupancy: 20,
     presenceDetected: true,
-    equipment: [
-      { id: "eq-01", name: "Fume Hood 1", status: "online", lastMaintenance: "2026-02-15", mode: "auto", isEssential: true, cumulativeRuntimeHours: 0, lastRuntimeUpdateAt: new Date().toISOString() },
-      { id: "eq-02", name: "Fume Hood 2", status: "online", lastMaintenance: "2026-02-15", mode: "auto", isEssential: true, cumulativeRuntimeHours: 0, lastRuntimeUpdateAt: new Date().toISOString() },
-      { id: "eq-03", name: "Centrifuge", status: "online", lastMaintenance: "2026-01-20", mode: "manual", isEssential: false, cumulativeRuntimeHours: 0, lastRuntimeUpdateAt: new Date().toISOString() },
-      { id: "eq-04", name: "Autoclave", status: "maintenance", lastMaintenance: "2026-02-10", mode: "manual", isEssential: false, cumulativeRuntimeHours: 0, lastRuntimeUpdateAt: new Date().toISOString() },
-    ],
+    equipment: [],
     alerts: [],
-    iotDevices: [
-      { id: "iot-01", name: "Temperature Sensor", type: "sensor", status: "online", lastSeen: new Date().toISOString(), signalStrength: 95, firmwareVersion: "2.1.3", dataRate: 6, location: "Ceiling Center" },
-      { id: "iot-02", name: "Humidity Sensor", type: "sensor", status: "online", lastSeen: new Date().toISOString(), signalStrength: 92, firmwareVersion: "2.1.3", dataRate: 6, location: "Ceiling Center" },
-      { id: "iot-03", name: "CO2 Sensor", type: "sensor", status: "online", lastSeen: new Date().toISOString(), signalStrength: 88, firmwareVersion: "1.9.2", dataRate: 2, location: "Wall Mount" },
-      { id: "iot-04", name: "Presence Sensor", type: "sensor", status: "online", lastSeen: new Date().toISOString(), signalStrength: 90, batteryLevel: 85, firmwareVersion: "1.5.0", dataRate: 1, location: "Door Frame" },
-      { id: "iot-05", name: "Main Gateway", type: "gateway", status: "online", lastSeen: new Date().toISOString(), signalStrength: 100, firmwareVersion: "3.2.1", dataRate: 30, location: "Equipment Room" },
-    ],
-    actuators: [
-      { id: "act-01", name: "HVAC System", type: "hvac", status: "auto", mode: "auto", lastActivated: new Date(Date.now() - 3600000).toISOString() },
-      { id: "act-02", name: "Exhaust Fan", type: "exhaust_fan", status: "off", mode: "auto" },
-      { id: "act-03", name: "LED Lights", type: "lighting", status: "on", mode: "manual", lastActivated: new Date(Date.now() - 7200000).toISOString() },
-    ],
+    iotDevices: [],
+    actuators: [],
   },
   {
     id: "lab-02",

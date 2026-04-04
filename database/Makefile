@@ -32,6 +32,7 @@ docker-logs:
 
 db-create:
 	docker exec smartlab-sqlserver /opt/mssql-tools18/bin/sqlcmd \
+		-C \
 		-S localhost \
 		-U sa \
 		-P 'SmartLab@2026!' \
@@ -41,6 +42,7 @@ db-create:
 db-schema:
 	docker cp ./database/sqlserver/001_schema.sql smartlab-sqlserver:/schema.sql
 	docker exec smartlab-sqlserver /opt/mssql-tools18/bin/sqlcmd \
+		-C \
 		-S localhost \
 		-U sa \
 		-P 'SmartLab@2026!' \
@@ -51,6 +53,7 @@ db-schema:
 db-seed:
 	docker cp ./database/sqlserver/002_seed_demo.sql smartlab-sqlserver:/seed.sql
 	docker exec smartlab-sqlserver /opt/mssql-tools18/bin/sqlcmd \
+		-C \
 		-S localhost \
 		-U sa \
 		-P 'SmartLab@2026!' \
@@ -63,6 +66,7 @@ db-reset: docker-down docker-up db-create db-schema db-seed
 
 test-connection:
 	docker exec smartlab-sqlserver /opt/mssql-tools18/bin/sqlcmd \
+		-C \
 		-S localhost \
 		-U sa \
 		-P 'SmartLab@2026!' \

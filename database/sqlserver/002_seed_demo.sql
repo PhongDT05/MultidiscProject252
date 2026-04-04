@@ -35,6 +35,10 @@ INSERT INTO smartlab.[User] (Username, Email, PasswordHash, DisplayName, RoleId,
 SELECT 'tech', 'tech@smartlab.local', 'tech123', 'Global Technician', 2, 'active'
 WHERE NOT EXISTS (SELECT 1 FROM smartlab.[User] WHERE Username = 'tech');
 
+INSERT INTO smartlab.[User] (Username, Email, PasswordHash, DisplayName, RoleId, AccountStatus)
+SELECT 'student', 'student@smartlab.local', 'student123', 'Guest Student', 3, 'active'
+WHERE NOT EXISTS (SELECT 1 FROM smartlab.[User] WHERE Username = 'student');
+
 UPDATE smartlab.[User]
 SET PasswordHash = 'admin123',
     AccountStatus = 'active',
@@ -58,11 +62,30 @@ SET PasswordHash = 'tech123',
     AccountStatus = 'active',
     UpdatedAt = SYSUTCDATETIME()
 WHERE Username = 'tech';
+
+UPDATE smartlab.[User]
+SET PasswordHash = 'student123',
+    AccountStatus = 'active',
+    UpdatedAt = SYSUTCDATETIME()
+WHERE Username = 'student';
 GO
 
+-- Lab A is prepared for real telemetry onboarding: no prefilled demo sensor values.
 INSERT INTO smartlab.Lab (LabCode, LabName, [Status], Temperature, Humidity, Co2Level, LightLevel, Occupancy, MaxOccupancy, PresenceDetected)
-SELECT 'lab-01', 'Chemistry Lab A', 'optimal', 22.5, 45, 420, 650, 8, 20, 1
+SELECT 'lab-01', 'Chemistry Lab A', 'warning', NULL, NULL, NULL, NULL, 0, 20, 0
 WHERE NOT EXISTS (SELECT 1 FROM smartlab.Lab WHERE LabCode = 'lab-01');
+
+-- Keep reseeds consistent even when lab-01 already exists from older demo data.
+UPDATE smartlab.Lab
+SET [Status] = 'warning',
+    Temperature = NULL,
+    Humidity = NULL,
+    Co2Level = NULL,
+    LightLevel = NULL,
+    Occupancy = 0,
+    PresenceDetected = 0,
+    UpdatedAt = SYSUTCDATETIME()
+WHERE LabCode = 'lab-01';
 
 INSERT INTO smartlab.Lab (LabCode, LabName, [Status], Temperature, Humidity, Co2Level, LightLevel, Occupancy, MaxOccupancy, PresenceDetected)
 SELECT 'lab-02', 'Biology Lab B', 'warning', 24.8, 62, 580, 720, 15, 20, 1

@@ -5,6 +5,7 @@ import { backendApi } from './backendApi';
 const LABS_KEY = 'smartlab_api_labs';
 const USERS_KEY = 'smartlab_api_users';
 const SESSION_KEY = 'smartlab_user';
+const LAB01_DEVICE_CLEAR_MIGRATION_KEY = 'smartlab_migration_lab01_clear_devices_v1';
 
 const API_DELAY_MS = 250;
 const useBackendApi = import.meta.env.VITE_USE_BACKEND_API?.toString().toLowerCase() === 'true';
@@ -50,6 +51,26 @@ const normalizeLabs = (labs: LabRoom[]): LabRoom[] =>
         device.estimatedMaintenanceHours ?? maintenanceHoursByType(device.type),
     })),
   }));
+
+const applyLab01DeviceClearMigration = (labs: LabRoom[]): LabRoom[] => {
+  if (localStorage.getItem(LAB01_DEVICE_CLEAR_MIGRATION_KEY) === 'done') {
+    return labs;
+  }
+
+  const migrated = labs.map((room) =>
+    room.id === 'lab-01'
+      ? {
+          ...room,
+          equipment: [],
+          iotDevices: [],
+          actuators: [],
+        }
+      : room,
+  );
+
+  localStorage.setItem(LAB01_DEVICE_CLEAR_MIGRATION_KEY, 'done');
+  return migrated;
+};
 
 // Device creation helpers
 const generateDeviceId = (type: 'iot' | 'equipment'): string => {
@@ -260,6 +281,18 @@ const defaultAccounts: AuthAccount[] = [
     password: 'lab6spec123',
     assignedLabs: ['lab-06'],
   },
+
+  // ============ STUDENT / GUEST ============
+  {
+    id: '301',
+    username: 'student',
+    email: 'student@smartlab.com',
+    name: 'Guest Student',
+    role: 'student',
+    status: 'active',
+    lastLogin: '2026-03-19 10:05',
+    password: 'student123',
+  },
 ];
 
 const sleep = (ms = API_DELAY_MS) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -352,12 +385,12 @@ export const appApi = {
     await sleep();
     const parsed = parseJson<LabRoom[]>(localStorage.getItem(LABS_KEY));
     if (!Array.isArray(parsed) || parsed.length === 0) {
-      const fallbackLabs = normalizeLabs(cloneInitialLabs());
+      const fallbackLabs = applyLab01DeviceClearMigration(normalizeLabs(cloneInitialLabs()));
       localStorage.setItem(LABS_KEY, JSON.stringify(fallbackLabs));
       return fallbackLabs;
     }
 
-    const normalized = normalizeLabs(parsed);
+    const normalized = applyLab01DeviceClearMigration(normalizeLabs(parsed));
     localStorage.setItem(LABS_KEY, JSON.stringify(normalized));
     return normalized;
   },
