@@ -46,13 +46,36 @@ const hasSignificantChange = (
 
 const parseNumberPayload = (payload: string): number | null => {
   const value = Number(payload);
-  return Number.isFinite(value) ? value : null;
+  if (Number.isFinite(value)) return value;
+
+  try {
+    const parsed = JSON.parse(payload) as { value?: unknown; data?: unknown; v?: unknown };
+    const candidates = [parsed?.value, parsed?.data, parsed?.v];
+    for (const candidate of candidates) {
+      const next = Number(candidate);
+      if (Number.isFinite(next)) return next;
+    }
+  } catch {
+    // ignore invalid JSON payloads and fall through
+  }
+
+  return null;
 };
 
 const parseBooleanPayload = (payload: string): boolean | null => {
   const normalized = payload.trim().toLowerCase();
   if (['1', 'true', 'on', 'yes', 'detected'].includes(normalized)) return true;
   if (['0', 'false', 'off', 'no', 'none', 'clear'].includes(normalized)) return false;
+
+  try {
+    const parsed = JSON.parse(payload) as { value?: unknown; data?: unknown; active?: unknown };
+    const source = String(parsed?.value ?? parsed?.data ?? parsed?.active ?? '').trim().toLowerCase();
+    if (['1', 'true', 'on', 'yes', 'detected'].includes(source)) return true;
+    if (['0', 'false', 'off', 'no', 'none', 'clear'].includes(source)) return false;
+  } catch {
+    // ignore invalid JSON payloads and fall through
+  }
+
   return null;
 };
 
@@ -60,6 +83,16 @@ const parseModePayload = (payload: string): 'auto' | 'manual' | null => {
   const normalized = payload.trim().toLowerCase();
   if (normalized === 'auto') return 'auto';
   if (normalized === 'manual') return 'manual';
+
+  try {
+    const parsed = JSON.parse(payload) as { mode?: unknown; value?: unknown };
+    const source = String(parsed?.mode ?? parsed?.value ?? '').trim().toLowerCase();
+    if (source === 'auto') return 'auto';
+    if (source === 'manual') return 'manual';
+  } catch {
+    // ignore invalid JSON payloads and fall through
+  }
+
   return null;
 };
 
@@ -87,6 +120,58 @@ const sensorTopicNameMap: Record<string, string> = {
   bh1750: 'BH1750 Light Sensor',
   radar: 'Radar Presence Sensor',
   mq135: 'MQ135 Air Sensor',
+};
+
+const telemetryTopicSensorMap: Record<string, string> = {
+  'esp32SLG4/temperate': 'Temperature Sensor',
+  'esp32SLG4/temperature': 'Temperature Sensor',
+  'esp32SLG4/humidity': 'Humidity Sensor',
+  'esp32SLG4/light': 'Light Sensor',
+  'esp32SLG4/air': 'CO2 Sensor',
+  'esp32SLG4/co2': 'CO2 Sensor',
+  'esp32SLG4/counter': 'Occupancy Counter',
+  'esp32SLG4/occupancy': 'Occupancy Counter',
+  'esp32SLG4/presence': 'Presence Sensor',
+};
+
+const upsertSensorFromTelemetryTopic = (room: LabRoom, topic: string, receivedAt: string): LabRoom => {
+  const sensorName = telemetryTopicSensorMap[topic];
+  if (!sensorName) return room;
+
+  const existing = room.iotDevices.find((item) => item.name === sensorName);
+  if (existing) {
+    if (existing.status === 'online' && existing.lastSeen === receivedAt) {
+      return room;
+    }
+
+    return {
+      ...room,
+      iotDevices: room.iotDevices.map((item) =>
+        item.name === sensorName
+          ? { ...item, status: 'online', lastSeen: receivedAt }
+          : item,
+      ),
+    };
+  }
+
+  const sensorKey = topic.split('/').pop() ?? 'sensor';
+  return {
+    ...room,
+    iotDevices: [
+      ...room.iotDevices,
+      {
+        id: `iot-live-${sensorKey}-${Date.now()}`,
+        name: sensorName,
+        type: 'sensor',
+        status: 'online',
+        lastSeen: receivedAt,
+        signalStrength: 100,
+        firmwareVersion: 'mqtt-live',
+        dataRate: 1,
+        location: 'MQTT source',
+      },
+    ],
+  };
 };
 
 const MAX_ALERTS_PER_ROOM = 100;
@@ -145,6 +230,7 @@ const applyMqttMessageToRoom = (room: LabRoom, message: MqttTelemetryMessage): L
       if (value === null) return room;
       if (nextRoom.presenceDetected === value) return room;
       nextRoom = { ...nextRoom, presenceDetected: value };
+      nextRoom = upsertSensorFromTelemetryTopic(nextRoom, message.topic, message.receivedAt);
       break;
     }
     case 'esp32SLG4/mode': {
@@ -160,11 +246,13 @@ const applyMqttMessageToRoom = (room: LabRoom, message: MqttTelemetryMessage): L
       };
       break;
     }
-    case 'esp32SLG4/temperate': {
+    case 'esp32SLG4/temperate':
+    case 'esp32SLG4/temperature': {
       const value = parseNumberPayload(message.payload);
       if (value === null) return room;
       if (!hasSignificantChange(nextRoom.temperature, value, mqttTemperatureEpsilon)) return room;
       nextRoom = { ...nextRoom, temperature: value };
+      nextRoom = upsertSensorFromTelemetryTopic(nextRoom, message.topic, message.receivedAt);
       break;
     }
     case 'esp32SLG4/humidity': {
@@ -172,6 +260,7 @@ const applyMqttMessageToRoom = (room: LabRoom, message: MqttTelemetryMessage): L
       if (value === null) return room;
       if (!hasSignificantChange(nextRoom.humidity, value, mqttHumidityEpsilon)) return room;
       nextRoom = { ...nextRoom, humidity: value };
+      nextRoom = upsertSensorFromTelemetryTopic(nextRoom, message.topic, message.receivedAt);
       break;
     }
     case 'esp32SLG4/light': {
@@ -179,16 +268,20 @@ const applyMqttMessageToRoom = (room: LabRoom, message: MqttTelemetryMessage): L
       if (value === null) return room;
       if (!hasSignificantChange(nextRoom.lightLevel, value, mqttLightEpsilon)) return room;
       nextRoom = { ...nextRoom, lightLevel: value };
+      nextRoom = upsertSensorFromTelemetryTopic(nextRoom, message.topic, message.receivedAt);
       break;
     }
-    case 'esp32SLG4/air': {
+    case 'esp32SLG4/air':
+    case 'esp32SLG4/co2': {
       const value = parseNumberPayload(message.payload);
       if (value === null) return room;
       if (!hasSignificantChange(nextRoom.co2Level, value, mqttAirEpsilon)) return room;
       nextRoom = { ...nextRoom, co2Level: value };
+      nextRoom = upsertSensorFromTelemetryTopic(nextRoom, message.topic, message.receivedAt);
       break;
     }
-    case 'esp32SLG4/counter': {
+    case 'esp32SLG4/counter':
+    case 'esp32SLG4/occupancy': {
       const value = parseNumberPayload(message.payload);
       if (value === null) return room;
       const rounded = Math.max(0, Math.round(value));
@@ -198,6 +291,7 @@ const applyMqttMessageToRoom = (room: LabRoom, message: MqttTelemetryMessage): L
         ...nextRoom,
         occupancy: nextOccupancy,
       };
+      nextRoom = upsertSensorFromTelemetryTopic(nextRoom, message.topic, message.receivedAt);
       break;
     }
     case 'esp32SLG4/commands': {
