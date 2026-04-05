@@ -107,11 +107,231 @@ const parseSensorHealthStatus = (
   payload: string,
 ): IoTDevice['status'] | null => {
   const normalized = payload.trim().toLowerCase();
-  if (['online', 'ok', 'healthy', '1', 'true'].includes(normalized)) return 'online';
+  if (['online', 'ok', 'healthy', 'connected', 'on', '1', 'true'].includes(normalized)) return 'online';
   if (['warning', 'degraded'].includes(normalized)) return 'warning';
-  if (['offline', '0', 'false'].includes(normalized)) return 'offline';
+  if (['offline', 'disconnected', 'off', '0', 'false'].includes(normalized)) return 'offline';
   if (['error', 'failed'].includes(normalized)) return 'error';
   return null;
+};
+
+type ExternalPowerOffCommand = {
+  appliesToAll: boolean;
+  targetType: 'any' | 'equipment' | 'actuator';
+  targetIds: Set<string>;
+  targetNames: Set<string>;
+};
+
+const normalizeDeviceKey = (value: string) =>
+  value.trim().toLowerCase().replace(/[\s_-]+/g, '');
+
+const isPowerOffToken = (value: string) =>
+  ['off', 'false', '0', 'disable', 'disabled', 'turnoff', 'poweroff', 'shutdown', 'stop'].includes(
+    value,
+  );
+
+const collectTargets = (raw: unknown): string[] => {
+  if (Array.isArray(raw)) {
+    return raw.map((item) => String(item).trim()).filter(Boolean);
+  }
+
+  if (raw === null || raw === undefined) {
+    return [];
+  }
+
+  return String(raw)
+    .split(/[;,]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+};
+
+const parseExternalPowerOffCommand = (payload: string): ExternalPowerOffCommand | null => {
+  const normalizedPayload = payload.trim().toLowerCase();
+  if (!normalizedPayload) {
+    return null;
+  }
+
+  const parseTargetType = (rawType: unknown): ExternalPowerOffCommand['targetType'] => {
+    const normalizedType = String(rawType ?? '')
+      .trim()
+      .toLowerCase();
+    if (normalizedType === 'equipment') return 'equipment';
+    if (normalizedType === 'actuator' || normalizedType === 'actuators') return 'actuator';
+    return 'any';
+  };
+
+  try {
+    const parsed = JSON.parse(payload) as {
+      action?: unknown;
+      command?: unknown;
+      cmd?: unknown;
+      status?: unknown;
+      state?: unknown;
+      power?: unknown;
+      value?: unknown;
+      target?: unknown;
+      device?: unknown;
+      id?: unknown;
+      name?: unknown;
+      type?: unknown;
+      deviceType?: unknown;
+      all?: unknown;
+    };
+
+    const tokens = [
+      parsed.action,
+      parsed.command,
+      parsed.cmd,
+      parsed.status,
+      parsed.state,
+      parsed.power,
+      parsed.value,
+    ]
+      .map((item) => String(item ?? '').trim().toLowerCase())
+      .filter(Boolean)
+      .map((item) => item.replace(/[\s_-]+/g, ''));
+
+    const isPowerOff = tokens.some((token) => isPowerOffToken(token));
+    if (!isPowerOff) {
+      return null;
+    }
+
+    const targetType = parseTargetType(parsed.deviceType ?? parsed.type);
+    const targetCandidates = [parsed.target, parsed.device, parsed.id, parsed.name]
+      .flatMap((item) => collectTargets(item))
+      .filter(Boolean);
+
+    const targetIds = new Set<string>();
+    const targetNames = new Set<string>();
+    targetCandidates.forEach((target) => {
+      const normalizedTarget = normalizeDeviceKey(target);
+      if (!normalizedTarget) return;
+      targetIds.add(normalizedTarget);
+      targetNames.add(normalizedTarget);
+    });
+
+    const appliesToAll =
+      parsed.all === true || targetCandidates.length === 0 || ['all', '*'].includes(normalizedPayload);
+
+    return {
+      appliesToAll,
+      targetType,
+      targetIds,
+      targetNames,
+    };
+  } catch {
+    // Ignore invalid JSON and attempt plain-text command parsing.
+  }
+
+  const compact = normalizedPayload.replace(/[\s_-]+/g, '');
+  const isPowerOff =
+    isPowerOffToken(compact) ||
+    compact.startsWith('turnoff') ||
+    compact.startsWith('poweroff') ||
+    compact.startsWith('disable');
+
+  if (!isPowerOff) {
+    return null;
+  }
+
+  const targetType: ExternalPowerOffCommand['targetType'] = compact.includes('actuator')
+    ? 'actuator'
+    : compact.includes('equipment')
+      ? 'equipment'
+      : 'any';
+
+  const targetIds = new Set<string>();
+  const targetNames = new Set<string>();
+  const namedTargetMatch = payload
+    .toLowerCase()
+    .match(/(?:turn\s*off|power\s*off|disable)\s+(.+)$/i);
+  const inlineOffMatch = payload.toLowerCase().match(/^(.+?)\s*[:=]\s*(?:off|0|false|disabled?)$/i);
+  const rawTarget = namedTargetMatch?.[1] ?? inlineOffMatch?.[1] ?? '';
+
+  if (rawTarget) {
+    collectTargets(rawTarget).forEach((target) => {
+      const normalizedTarget = normalizeDeviceKey(target);
+      if (!normalizedTarget || normalizedTarget === 'all' || normalizedTarget === '*') return;
+      targetIds.add(normalizedTarget);
+      targetNames.add(normalizedTarget);
+    });
+  }
+
+  return {
+    appliesToAll: targetIds.size === 0,
+    targetType,
+    targetIds,
+    targetNames,
+  };
+};
+
+const applyExternalPowerOffToRoom = (
+  room: LabRoom,
+  command: ExternalPowerOffCommand,
+): { room: LabRoom; disabledCount: number } => {
+  const isTargeted = (
+    kind: 'equipment' | 'actuator',
+    id: string,
+    name: string,
+  ) => {
+    if (command.targetType !== 'any' && command.targetType !== kind) {
+      return false;
+    }
+    if (command.appliesToAll) {
+      return true;
+    }
+
+    const normalizedId = normalizeDeviceKey(id);
+    const normalizedName = normalizeDeviceKey(name);
+    return command.targetIds.has(normalizedId) || command.targetNames.has(normalizedName);
+  };
+
+  let disabledCount = 0;
+  const nextEquipment = room.equipment.map((item) => {
+    if (!isTargeted('equipment', item.id, item.name)) {
+      return item;
+    }
+    if (item.status === 'offline') {
+      return item;
+    }
+
+    disabledCount += 1;
+    return {
+      ...item,
+      status: 'offline',
+      mode: 'manual',
+      lastMaintenance: new Date().toISOString().split('T')[0],
+    } as Equipment;
+  });
+
+  const nextActuators = room.actuators.map((item) => {
+    if (!isTargeted('actuator', item.id, item.name)) {
+      return item;
+    }
+    if (item.status === 'off') {
+      return item;
+    }
+
+    disabledCount += 1;
+    return {
+      ...item,
+      status: 'off',
+      mode: 'manual',
+      lastActivated: new Date().toISOString(),
+    } as Actuator;
+  });
+
+  if (disabledCount === 0) {
+    return { room, disabledCount: 0 };
+  }
+
+  return {
+    room: {
+      ...room,
+      equipment: nextEquipment,
+      actuators: nextActuators,
+    },
+    disabledCount,
+  };
 };
 
 const sensorTopicNameMap: Record<string, string> = {
@@ -221,6 +441,55 @@ const upsertAlertFromTopic = (room: LabRoom, topic: string, payload: string): La
   };
 };
 
+const upsertThresholdAlertsFromCurrentReadings = (room: LabRoom): LabRoom => {
+  const thresholdViolations = [
+    {
+      reasonCode: 'TEMP_THRESHOLD',
+      field: 'temperature',
+      violated: !isTemperatureOptimal(room.temperature),
+      formattedValue: `${room.temperature.toFixed(1)} C`,
+    },
+    {
+      reasonCode: 'HUMIDITY_THRESHOLD',
+      field: 'humidity',
+      violated: !isHumidityOptimal(room.humidity),
+      formattedValue: `${room.humidity.toFixed(1)} %`,
+    },
+    {
+      reasonCode: 'AIR_THRESHOLD',
+      field: 'air',
+      violated: !isCO2Optimal(room.co2Level),
+      formattedValue: `${room.co2Level.toFixed(0)} ppm`,
+    },
+  ] as const;
+
+  const newAlerts: Alert[] = thresholdViolations
+    .filter(({ violated, reasonCode }) => {
+      if (!violated) return false;
+      return !room.alerts.some((alert) => alert.reasonCode === reasonCode && !alert.acknowledged);
+    })
+    .map(({ reasonCode, field, formattedValue }) => ({
+      id: `mqtt-alert-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+      type: 'warning',
+      severity: 'medium',
+      message: `Threshold alert on ${field}: ${formattedValue}`,
+      reasonCode,
+      timestamp: new Date().toISOString(),
+      acknowledged: false,
+      autoResolved: false,
+      roomId: room.id,
+    }));
+
+  if (newAlerts.length === 0) {
+    return room;
+  }
+
+  return {
+    ...room,
+    alerts: [...newAlerts, ...room.alerts].slice(0, MAX_ALERTS_PER_ROOM),
+  };
+};
+
 const applyMqttMessageToRoom = (room: LabRoom, message: MqttTelemetryMessage): LabRoom => {
   let nextRoom = room;
 
@@ -284,22 +553,34 @@ const applyMqttMessageToRoom = (room: LabRoom, message: MqttTelemetryMessage): L
     case 'esp32SLG4/occupancy': {
       const value = parseNumberPayload(message.payload);
       if (value === null) return room;
-      const rounded = Math.max(0, Math.round(value));
-      const nextOccupancy = Math.min(nextRoom.maxOccupancy, rounded);
+      const nextOccupancy = value > 0 ? 1 : 0;
       if (nextRoom.occupancy === nextOccupancy) return room;
       nextRoom = {
         ...nextRoom,
         occupancy: nextOccupancy,
+        presenceDetected: nextOccupancy === 1,
       };
       nextRoom = upsertSensorFromTelemetryTopic(nextRoom, message.topic, message.receivedAt);
       break;
     }
     case 'esp32SLG4/commands': {
+      const externalPowerOffCommand = parseExternalPowerOffCommand(message.payload);
+      let disabledCount = 0;
+
+      if (externalPowerOffCommand) {
+        const externalPowerOffResult = applyExternalPowerOffToRoom(nextRoom, externalPowerOffCommand);
+        nextRoom = externalPowerOffResult.room;
+        disabledCount = externalPowerOffResult.disabledCount;
+      }
+
       const commandAlert: Alert = {
         id: `mqtt-cmd-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
         type: 'info',
         severity: 'low',
-        message: `Command received: ${message.payload || 'n/a'}`,
+        message:
+          disabledCount > 0
+            ? `External OFF command applied: ${disabledCount} device(s) disabled.`
+            : `Command received: ${message.payload || 'n/a'}`,
         reasonCode: 'MQTT_COMMAND',
         timestamp: new Date().toISOString(),
         acknowledged: false,
@@ -322,12 +603,14 @@ const applyMqttMessageToRoom = (room: LabRoom, message: MqttTelemetryMessage): L
         const mappedName = sensorTopicNameMap[sensorKey] ?? sensorKey.toUpperCase();
         const nextStatus = parseSensorHealthStatus(message.payload);
         if (!nextStatus) return room;
+        let didSensorConnect = false;
 
         const existingDevice = nextRoom.iotDevices.find((item) => item.name === mappedName);
         if (existingDevice) {
           if (existingDevice.status === nextStatus) {
             return room;
           }
+          didSensorConnect = existingDevice.status !== 'online' && nextStatus === 'online';
           nextRoom = {
             ...nextRoom,
             iotDevices: nextRoom.iotDevices.map((item) =>
@@ -354,6 +637,11 @@ const applyMqttMessageToRoom = (room: LabRoom, message: MqttTelemetryMessage): L
               },
             ],
           };
+          didSensorConnect = nextStatus === 'online';
+        }
+
+        if (didSensorConnect) {
+          nextRoom = upsertThresholdAlertsFromCurrentReadings(nextRoom);
         }
       }
       break;
@@ -387,6 +675,9 @@ const applyDerivedStatus = (room: LabRoom): LabRoom => {
 const applyDerivedStatusToLabs = (rooms: LabRoom[]): LabRoom[] =>
   rooms.map((room) => applyDerivedStatus(room));
 
+const applyThresholdAlertsToLabs = (rooms: LabRoom[]): LabRoom[] =>
+  rooms.map((room) => upsertThresholdAlertsFromCurrentReadings(room));
+
 const cloneInitialLabs = (): LabRoom[] =>
   labRooms.map((room) => ({
     ...room,
@@ -419,12 +710,16 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         ]);
 
         if (!isMounted) return;
-        setLabs(applyDerivedStatusToLabs(loadedLabs.length > 0 ? loadedLabs : cloneInitialLabs()));
+        setLabs(
+          applyThresholdAlertsToLabs(
+            applyDerivedStatusToLabs(loadedLabs.length > 0 ? loadedLabs : cloneInitialLabs()),
+          ),
+        );
         setUsers(loadedUsers);
       } catch {
         if (!isMounted) return;
         setError('Failed to load application data. Using fallback state.');
-        setLabs(applyDerivedStatusToLabs(cloneInitialLabs()));
+        setLabs(applyThresholdAlertsToLabs(applyDerivedStatusToLabs(cloneInitialLabs())));
       } finally {
         if (isMounted) {
           setIsLoading(false);
@@ -710,7 +1005,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setError(null);
     void appApi
       .resetLabs()
-      .then((resetData) => setLabs(applyDerivedStatusToLabs(resetData)))
+      .then((resetData) =>
+        setLabs(applyThresholdAlertsToLabs(applyDerivedStatusToLabs(resetData))),
+      )
       .catch(() => setError('Failed to reset labs.'));
   };
 

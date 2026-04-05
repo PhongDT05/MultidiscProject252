@@ -187,8 +187,7 @@ export function DataSimulator() {
 
   const simulateOccupancyChange = (room: LabRoom) => {
     const oldOccupancy = room.occupancy;
-    const change = Math.random() > 0.5 ? 1 : -1;
-    const newOccupancy = Math.max(0, Math.min(room.maxOccupancy, oldOccupancy + change));
+    const newOccupancy = oldOccupancy > 0 ? 0 : 1;
     
     if (newOccupancy === oldOccupancy) {
       withRuntimeUpdate(room, (targetRoom) => targetRoom);
@@ -198,6 +197,7 @@ export function DataSimulator() {
     withRuntimeUpdate(room, (targetRoom) => ({
       ...targetRoom,
       occupancy: newOccupancy,
+        presenceDetected: newOccupancy === 1,
     }));
 
     addLog({
@@ -207,7 +207,7 @@ export function DataSimulator() {
       field: 'Occupancy',
       oldValue: oldOccupancy,
       newValue: newOccupancy,
-      description: `${change > 0 ? 'Person entered' : 'Person exited'} the lab`,
+      description: newOccupancy === 1 ? 'Someone entered the lab' : 'The lab became empty',
     });
   };
 

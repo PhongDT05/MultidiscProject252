@@ -44,6 +44,42 @@ interface MqttClientOptions {
   clean?: boolean;
 }
 
+type MqttConnectFn = (
+  brokerUrl: string,
+  options?: MqttClientOptions,
+) => {
+  on: (event: string, cb: (...args: unknown[]) => void) => void;
+  subscribe: (
+    topics: string[],
+    cb: (error?: { message?: string } | null) => void,
+  ) => void;
+  end: (force?: boolean) => void;
+};
+
+const resolveMqttConnect = (module: unknown): MqttConnectFn | null => {
+  const maybeModule = module as {
+    connect?: unknown;
+    default?: unknown;
+  };
+
+  if (typeof maybeModule?.connect === 'function') {
+    return maybeModule.connect as MqttConnectFn;
+  }
+
+  if (
+    maybeModule?.default &&
+    typeof (maybeModule.default as { connect?: unknown }).connect === 'function'
+  ) {
+    return (maybeModule.default as { connect: MqttConnectFn }).connect;
+  }
+
+  if (typeof maybeModule?.default === 'function') {
+    return maybeModule.default as MqttConnectFn;
+  }
+
+  return null;
+};
+
 const buildClientOptions = (): MqttClientOptions => ({
   clientId:
     import.meta.env.VITE_MQTT_CLIENT_ID?.toString() ??
@@ -81,8 +117,14 @@ export function subscribeMqttTelemetry(handlers: SubscribeTelemetryHandlers): ()
   let disposed = false;
 
   void import('mqtt')
-    .then(({ connect }) => {
+    .then((mqttModule) => {
       if (disposed) return;
+
+      const connect = resolveMqttConnect(mqttModule);
+      if (!connect) {
+        handlers.onError?.('Failed to initialize MQTT client: mqtt.connect export not found.');
+        return;
+      }
 
       const nextClient = connect(brokerUrl, buildClientOptions());
       client = nextClient as unknown as typeof client;

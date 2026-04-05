@@ -11,6 +11,7 @@ import {
   Droplets,
   Wind,
   Users,
+  Sun,
   AlertTriangle,
   CheckCircle,
   AlertCircle,
@@ -22,6 +23,9 @@ import {
   Lock,
   ShieldAlert,
   Plus,
+  Radio,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
 import {
   LineChart,
@@ -110,6 +114,64 @@ export function RoomDetail() {
   }
 
   const historicalData = generateHistoricalData(room.id);
+  const sensorDevices = room.iotDevices.filter((device) => device.type === 'sensor');
+
+  const getSensorStatusClass = (status: string) => {
+    switch (status) {
+      case 'online':
+        return 'bg-green-100 text-green-700';
+      case 'warning':
+        return 'bg-amber-100 text-amber-700';
+      case 'error':
+        return 'bg-red-100 text-red-700';
+      default:
+        return 'bg-slate-100 text-slate-700';
+    }
+  };
+
+  const formatSensorLastSeen = (lastSeen: string) => {
+    const diff = Date.now() - new Date(lastSeen).getTime();
+    const seconds = Math.max(0, Math.floor(diff / 1000));
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+
+    if (seconds < 60) return `${seconds}s ago`;
+    if (minutes < 60) return `${minutes}m ago`;
+    return `${hours}h ago`;
+  };
+
+  const sensorReadings = [
+    {
+      key: 'temperature',
+      label: 'Temperature',
+      value: `${room.temperature.toFixed(1)} C`,
+      optimal: room.temperature >= 20 && room.temperature <= 24,
+    },
+    {
+      key: 'humidity',
+      label: 'Humidity',
+      value: `${room.humidity.toFixed(1)} %`,
+      optimal: room.humidity >= 40 && room.humidity <= 60,
+    },
+    {
+      key: 'co2',
+      label: 'CO2 Level',
+      value: `${room.co2Level.toFixed(0)} ppm`,
+      optimal: room.co2Level < 500,
+    },
+    {
+      key: 'light',
+      label: 'Light Level',
+      value: `${room.lightLevel.toFixed(0)} lux`,
+      optimal: room.lightLevel > 0,
+    },
+    {
+      key: 'presence',
+      label: 'Presence',
+      value: room.presenceDetected ? 'Detected' : 'Clear',
+      optimal: true,
+    },
+  ] as const;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -201,7 +263,7 @@ export function RoomDetail() {
       {/* Current Metrics */}
       <div className="mb-8">
         <h3 className="text-lg font-semibold text-slate-900 mb-4">Current Conditions</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <div className="bg-white rounded-lg shadow-sm p-6 border border-slate-200">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm text-slate-600">Temperature</span>
@@ -237,16 +299,127 @@ export function RoomDetail() {
 
           <div className="bg-white rounded-lg shadow-sm p-6 border border-slate-200">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-slate-600">Occupancy</span>
+              <span className="text-sm text-slate-600">Light Level</span>
+              <Sun className="w-5 h-5 text-yellow-500" />
+            </div>
+            <div className="text-3xl font-semibold text-slate-900">{room.lightLevel} lux</div>
+            <div className="mt-2 text-sm text-slate-500">
+              Sensor reading
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow-sm p-6 border border-slate-200">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm text-slate-600">Occupancy Status</span>
               <Users className="w-5 h-5 text-purple-500" />
             </div>
             <div className="text-3xl font-semibold text-slate-900">
-              {room.occupancy}/{room.maxOccupancy}
+              {room.presenceDetected || room.occupancy > 0 ? 'Occupied' : 'Empty'}
             </div>
             <div className="mt-2 text-sm text-slate-500">
-              {Math.round((room.occupancy / room.maxOccupancy) * 100)}% capacity
+              Based on presence detection, not headcount
             </div>
           </div>
+
+          <div className="bg-white rounded-lg shadow-sm p-6 border border-slate-200">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm text-slate-600">Presence Sensor</span>
+              <Radio className="w-5 h-5 text-emerald-500" />
+            </div>
+            <div className="text-3xl font-semibold text-slate-900">
+              {room.presenceDetected ? 'Detected' : 'Clear'}
+            </div>
+            <div className="mt-2 text-sm text-slate-500">
+              Real-time motion/presence state
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Sensor Data Center */}
+      <div className="mb-8">
+        <h3 className="text-lg font-semibold text-slate-900 mb-4">Sensor Data Center</h3>
+        <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-200 bg-slate-50">
+            <p className="text-sm text-slate-600">
+              All sensors in {room.name} are consolidated here.
+            </p>
+          </div>
+
+          <div className="p-4 md:p-6 border-b border-slate-200">
+            <h4 className="text-sm font-semibold text-slate-900 mb-3">Sensor Readings Snapshot</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+              {sensorReadings.map((reading) => (
+                <div key={reading.key} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+                  <div className="text-xs text-slate-500">{reading.label}</div>
+                  <div className="mt-1 text-base font-semibold text-slate-900">{reading.value}</div>
+                  <div className={`mt-2 inline-flex items-center px-2 py-1 rounded-full text-xs ${
+                    reading.optimal ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                  }`}>
+                    {reading.optimal ? 'Normal' : 'Attention'}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="px-6 py-4 border-b border-slate-200 bg-slate-50">
+            <p className="text-sm text-slate-600">Detected Sensor Devices</p>
+          </div>
+
+          {sensorDevices.length === 0 ? (
+            <div className="p-6 text-sm text-slate-600">
+              No sensor devices reported yet. Snapshot readings above still reflect the current lab telemetry state.
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-200">
+              {sensorDevices.map((sensor) => (
+                <div key={sensor.id} className="p-4 md:p-5">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-slate-900">{sensor.name}</span>
+                        <span
+                          className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${getSensorStatusClass(sensor.status)}`}
+                        >
+                          {sensor.status === 'online' ? (
+                            <Wifi className="w-3 h-3" />
+                          ) : (
+                            <WifiOff className="w-3 h-3" />
+                          )}
+                          {sensor.status}
+                        </span>
+                      </div>
+                      <p className="text-sm text-slate-600 mt-1">
+                        {sensor.location} • Firmware {sensor.firmwareVersion}
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+                      <div className="rounded-lg bg-slate-50 border border-slate-200 px-3 py-2">
+                        <div className="text-slate-500">Signal</div>
+                        <div className="font-medium text-slate-900">{sensor.signalStrength}%</div>
+                      </div>
+                      <div className="rounded-lg bg-slate-50 border border-slate-200 px-3 py-2">
+                        <div className="text-slate-500">Rate</div>
+                        <div className="font-medium text-slate-900">{sensor.dataRate}/min</div>
+                      </div>
+                      <div className="rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 col-span-2 md:col-span-1">
+                        <div className="text-slate-500">Last Seen</div>
+                        <div className="font-medium text-slate-900">{formatSensorLastSeen(sensor.lastSeen)}</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {typeof sensor.batteryLevel === 'number' && (
+                    <div className="mt-3 text-sm text-slate-600">
+                      Battery: <span className="font-medium text-slate-900">{sensor.batteryLevel}%</span>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 

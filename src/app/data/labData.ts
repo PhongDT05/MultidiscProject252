@@ -164,14 +164,14 @@ export const labRooms: LabRoom[] = [
   {
     id: "lab-01",
     name: "Chemistry Lab A",
-    status: "optimal",
-    temperature: 22.5,
-    humidity: 45,
-    co2Level: 420,
-    lightLevel: 650,
-    occupancy: 8,
+    status: "warning",
+    temperature: 0,
+    humidity: 0,
+    co2Level: 0,
+    lightLevel: 0,
+    occupancy: 0,
     maxOccupancy: 20,
-    presenceDetected: true,
+    presenceDetected: false,
     equipment: [],
     alerts: [],
     iotDevices: [],
@@ -185,7 +185,7 @@ export const labRooms: LabRoom[] = [
     humidity: 62,
     co2Level: 580,
     lightLevel: 720,
-    occupancy: 15,
+    occupancy: 1,
     maxOccupancy: 20,
     presenceDetected: true,
     equipment: [
@@ -240,7 +240,7 @@ export const labRooms: LabRoom[] = [
     humidity: 40,
     co2Level: 400,
     lightLevel: 880,
-    occupancy: 5,
+    occupancy: 1,
     maxOccupancy: 15,
     presenceDetected: true,
     equipment: [
@@ -267,7 +267,7 @@ export const labRooms: LabRoom[] = [
     humidity: 38,
     co2Level: 720,
     lightLevel: 600,
-    occupancy: 18,
+    occupancy: 1,
     maxOccupancy: 20,
     presenceDetected: true,
     equipment: [
@@ -319,7 +319,7 @@ export const labRooms: LabRoom[] = [
     humidity: 48,
     co2Level: 450,
     lightLevel: 550,
-    occupancy: 3,
+    occupancy: 1,
     maxOccupancy: 10,
     presenceDetected: true,
     equipment: [
@@ -345,7 +345,7 @@ export const labRooms: LabRoom[] = [
     humidity: 55,
     co2Level: 520,
     lightLevel: 920,
-    occupancy: 12,
+    occupancy: 1,
     maxOccupancy: 18,
     presenceDetected: true,
     equipment: [
@@ -387,6 +387,7 @@ export const generateHistoricalData = (roomId: string): HistoricalData[] => {
   const room = labRooms.find((r) => r.id === roomId);
   
   if (!room) return data;
+  if (roomId === 'lab-01') return data;
 
   const baseTemp = room.temperature;
   const baseHumidity = room.humidity;

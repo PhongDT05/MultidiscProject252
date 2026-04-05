@@ -87,6 +87,44 @@ SET [Status] = 'warning',
     UpdatedAt = SYSUTCDATETIME()
 WHERE LabCode = 'lab-01';
 
+-- Clear all Lab A operational data so live sensor onboarding starts from a clean state.
+DECLARE @Lab01Id BIGINT = (
+  SELECT LabId
+  FROM smartlab.Lab
+  WHERE LabCode = 'lab-01'
+);
+
+IF @Lab01Id IS NOT NULL
+BEGIN
+  UPDATE smartlab.Equipment
+  SET DeletedAt = SYSUTCDATETIME(),
+    UpdatedAt = SYSUTCDATETIME()
+  WHERE LabId = @Lab01Id;
+
+  UPDATE smartlab.IoTDevice
+  SET DeletedAt = SYSUTCDATETIME(),
+    UpdatedAt = SYSUTCDATETIME()
+  WHERE LabId = @Lab01Id;
+
+  UPDATE smartlab.Actuator
+  SET DeletedAt = SYSUTCDATETIME(),
+    UpdatedAt = SYSUTCDATETIME()
+  WHERE LabId = @Lab01Id;
+
+  UPDATE smartlab.Alert
+  SET DeletedAt = SYSUTCDATETIME()
+  WHERE LabId = @Lab01Id;
+
+  DELETE FROM smartlab.AutomatedAction
+  WHERE LabId = @Lab01Id;
+
+  DELETE FROM smartlab.TelemetryReading
+  WHERE LabId = @Lab01Id;
+
+  DELETE FROM smartlab.DataChangeLog
+  WHERE LabId = @Lab01Id;
+END
+
 INSERT INTO smartlab.Lab (LabCode, LabName, [Status], Temperature, Humidity, Co2Level, LightLevel, Occupancy, MaxOccupancy, PresenceDetected)
 SELECT 'lab-02', 'Biology Lab B', 'warning', 24.8, 62, 580, 720, 15, 20, 1
 WHERE NOT EXISTS (SELECT 1 FROM smartlab.Lab WHERE LabCode = 'lab-02');
@@ -139,23 +177,8 @@ WHERE u.Username = 'tech'
   );
 GO
 
-INSERT INTO smartlab.ThresholdConfig (
-    LabId,
-    TemperatureMin, TemperatureMax, TemperatureWarningMin, TemperatureWarningMax,
-    HumidityMin, HumidityMax, HumidityWarningMin, HumidityWarningMax,
-    Co2Max, Co2WarningMax,
-    LightLevelMin, LightLevelMax,
-    UpdatedByUserId
-)
-SELECT l.LabId,
-       18, 24, 20, 23,
-       30, 60, 35, 55,
-       1000, 800,
-       300, 1000,
-       u.UserId
-FROM smartlab.Lab l
-CROSS JOIN smartlab.[User] u
-WHERE l.LabCode = 'lab-01'
-  AND u.Username = 'admin'
-  AND NOT EXISTS (SELECT 1 FROM smartlab.ThresholdConfig t WHERE t.LabId = l.LabId);
+DELETE t
+FROM smartlab.ThresholdConfig t
+INNER JOIN smartlab.Lab l ON l.LabId = t.LabId
+WHERE l.LabCode = 'lab-01';
 GO

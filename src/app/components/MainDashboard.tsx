@@ -37,8 +37,7 @@ export function MainDashboard() {
   const optimalRooms = accessibleLabs.filter((r) => r.status === "optimal").length;
   const warningRooms = accessibleLabs.filter((r) => r.status === "warning").length;
   const criticalRooms = accessibleLabs.filter((r) => r.status === "critical").length;
-  const totalOccupancy = accessibleLabs.reduce((sum, r) => sum + r.occupancy, 0);
-  const totalCapacity = accessibleLabs.reduce((sum, r) => sum + r.maxOccupancy, 0);
+  const occupiedLabs = accessibleLabs.filter((r) => r.presenceDetected || r.occupancy > 0).length;
   const avgTemperature = accessibleLabs.length > 0 ? (
     accessibleLabs.reduce((sum, r) => sum + r.temperature, 0) / accessibleLabs.length
   ).toFixed(1) : '0.0';
@@ -348,14 +347,14 @@ export function MainDashboard() {
             {/* Occupancy */}
             <div className="bg-white rounded-lg shadow-sm p-6 border border-slate-200">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-slate-600">Total Occupancy</span>
+                <span className="text-sm text-slate-600">Occupied Labs</span>
                 <Users className="w-5 h-5 text-purple-500" />
               </div>
               <div className="text-3xl font-semibold text-slate-900">
-                {totalOccupancy}/{totalCapacity}
+                {occupiedLabs}/{totalRooms}
               </div>
               <div className="mt-2 text-sm text-slate-500">
-                {totalCapacity > 0 ? Math.round((totalOccupancy / totalCapacity) * 100) : 0}% capacity
+                {totalRooms > 0 ? Math.round((occupiedLabs / totalRooms) * 100) : 0}% occupied
               </div>
             </div>
           </div>
@@ -413,7 +412,7 @@ export function MainDashboard() {
                   </div>
                   <div className="text-sm text-slate-600">
                     <Users className="w-4 h-4 inline mr-1" />
-                    {room.occupancy}/{room.maxOccupancy}
+                    {room.presenceDetected || room.occupancy > 0 ? 'Occupied' : 'Empty'}
                   </div>
                 </div>
 
