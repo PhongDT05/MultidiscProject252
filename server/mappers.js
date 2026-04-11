@@ -1,12 +1,14 @@
 const roleMapToUi = {
   ADMIN: 'admin',
   TECHNICIAN: 'technician',
+  INSTRUCTOR: 'instructor',
   STUDENT: 'student',
 };
 
 const roleMapToDb = {
   admin: 'ADMIN',
   technician: 'TECHNICIAN',
+  instructor: 'INSTRUCTOR',
   student: 'STUDENT',
 };
 

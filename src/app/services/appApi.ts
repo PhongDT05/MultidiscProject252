@@ -1,11 +1,12 @@
 import { labRooms, type LabRoom, type IoTDevice, type Equipment } from '../data/labData';
 import type { AuthAccount, ManagedUser, User } from '../types/auth';
-import { backendApi } from './backendApi';
+import { backendApi, type LabRecommendation, type TelemetrySnapshot } from './backendApi';
 
 const LABS_KEY = 'smartlab_api_labs';
 const USERS_KEY = 'smartlab_api_users';
 const SESSION_KEY = 'smartlab_user';
 const LAB01_EMPTY_BASELINE_MIGRATION_KEY = 'smartlab_migration_lab01_empty_baseline_v2';
+const RECOMMENDATIONS_KEY = 'smartlab_lab_recommendations_v1';
 
 const API_DELAY_MS = 250;
 const useBackendApi = import.meta.env.VITE_USE_BACKEND_API?.toString().toLowerCase() === 'true';
@@ -301,6 +302,27 @@ const defaultAccounts: AuthAccount[] = [
     lastLogin: '2026-03-19 10:05',
     password: 'student123',
   },
+  {
+    id: '302',
+    username: 'student2',
+    email: 'student2@smartlab.com',
+    name: 'Student Nguyen',
+    role: 'student',
+    status: 'active',
+    lastLogin: '2026-03-18 09:15',
+    password: 'student123',
+  },
+  {
+    id: '401',
+    username: 'instructor1',
+    email: 'instructor1@smartlab.com',
+    name: 'Dr. Lan Instructor',
+    role: 'instructor',
+    status: 'active',
+    lastLogin: '2026-03-27 07:45',
+    password: 'instructor123',
+    assignedLabs: ['lab-02', 'lab-03'],
+  },
 ];
 
 const sleep = (ms = API_DELAY_MS) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -340,6 +362,25 @@ const normalizeAccounts = (accounts: AuthAccount[]): AuthAccount[] => {
   });
 };
 
+const ensureRequiredMockAccounts = (accounts: AuthAccount[]): AuthAccount[] => {
+  const existingByUsername = new Set(
+    accounts
+      .map((account) => account.username?.toLowerCase())
+      .filter((username): username is string => Boolean(username)),
+  );
+
+  const missingDefaults = defaultAccounts.filter((account) => {
+    const username = (account.username || '').toLowerCase();
+    return username.length > 0 && !existingByUsername.has(username);
+  });
+
+  if (missingDefaults.length === 0) {
+    return accounts;
+  }
+
+  return [...accounts, ...missingDefaults.map((account) => ({ ...account }))];
+};
+
 const toPublicUser = (account: AuthAccount): User => ({
   id: account.id,
   username: account.username,
@@ -373,7 +414,8 @@ const readAccounts = (): AuthAccount[] => {
   ensureSeedData();
   const parsed = parseJson<AuthAccount[]>(localStorage.getItem(USERS_KEY));
   const accounts = Array.isArray(parsed) ? parsed : defaultAccounts;
-  const normalized = normalizeAccounts(accounts);
+  const withRequiredMocks = ensureRequiredMockAccounts(accounts);
+  const normalized = normalizeAccounts(withRequiredMocks);
   if (JSON.stringify(accounts) !== JSON.stringify(normalized)) {
     writeAccounts(normalized);
   }
@@ -382,6 +424,15 @@ const readAccounts = (): AuthAccount[] => {
 
 const writeAccounts = (accounts: AuthAccount[]) => {
   localStorage.setItem(USERS_KEY, JSON.stringify(accounts));
+};
+
+const readRecommendations = (): LabRecommendation[] => {
+  const parsed = parseJson<LabRecommendation[]>(localStorage.getItem(RECOMMENDATIONS_KEY));
+  return Array.isArray(parsed) ? parsed : [];
+};
+
+const writeRecommendations = (items: LabRecommendation[]) => {
+  localStorage.setItem(RECOMMENDATIONS_KEY, JSON.stringify(items));
 };
 
 export const appApi = {
@@ -598,6 +649,63 @@ export const appApi = {
 
     writeAccounts(updatedAccounts);
     return { success: true, newPassword };
+  },
+
+  async recordTelemetrySnapshots(labs: TelemetrySnapshot[], recordedAt: string): Promise<void> {
+    if (useBackendApi) {
+      await backendApi.recordTelemetrySnapshots(labs, recordedAt);
+      return;
+    }
+    await sleep(120);
+  },
+
+  async getRecommendations(labId?: string): Promise<LabRecommendation[]> {
+    if (useBackendApi) {
+      return backendApi.getRecommendations(labId);
+    }
+    await sleep(120);
+    const items = readRecommendations();
+    if (!labId) return items.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return items
+      .filter((item) => item.labId === labId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  },
+
+  async sendRecommendation(labId: string, studentUserId: string, message: string): Promise<void> {
+    if (useBackendApi) {
+      await backendApi.sendRecommendation(labId, studentUserId, message);
+      return;
+    }
+
+    await sleep(120);
+    const accounts = readAccounts();
+    const student = accounts.find((account) => account.id === studentUserId && account.role === 'student');
+    if (!student) {
+      throw new Error('Only students can send recommendations.');
+    }
+
+    const instructor = accounts.find(
+      (account) =>
+        account.role === 'instructor' &&
+        Array.isArray(account.assignedLabs) &&
+        account.assignedLabs.includes(labId),
+    );
+
+    if (!instructor) {
+      throw new Error('No instructor is currently assigned to this lab.');
+    }
+
+    const nextRecommendation: LabRecommendation = {
+      id: `rec-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      labId,
+      message,
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+      studentName: student.name,
+      instructorName: instructor.name,
+    };
+
+    writeRecommendations([nextRecommendation, ...readRecommendations()]);
   },
 
   // Device creation helpers (exported for use in other services and context)

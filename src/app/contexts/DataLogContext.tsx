@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
 
 export type ChangeType = 
   | 'temperature' 
@@ -32,9 +32,37 @@ interface DataLogContextType {
 }
 
 const DataLogContext = createContext<DataLogContextType | undefined>(undefined);
+const DATA_LOGS_STORAGE_KEY = 'smartlab_data_logs_v1';
+
+const readPersistedLogs = (): DataChangeLog[] => {
+  try {
+    const raw = localStorage.getItem(DATA_LOGS_STORAGE_KEY);
+    if (!raw) return [];
+
+    const parsed = JSON.parse(raw) as Array<Omit<DataChangeLog, 'timestamp'> & { timestamp: string }>;
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed
+      .map((item) => ({
+        ...item,
+        timestamp: new Date(item.timestamp),
+      }))
+      .filter((item) => !Number.isNaN(item.timestamp.getTime()));
+  } catch {
+    return [];
+  }
+};
 
 export function DataLogProvider({ children }: { children: ReactNode }) {
-  const [logs, setLogs] = useState<DataChangeLog[]>([]);
+  const [logs, setLogs] = useState<DataChangeLog[]>(() => readPersistedLogs());
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(DATA_LOGS_STORAGE_KEY, JSON.stringify(logs));
+    } catch {
+      // Ignore localStorage errors (quota/private mode).
+    }
+  }, [logs]);
 
   const addLog = useCallback((log: Omit<DataChangeLog, 'id' | 'timestamp'>) => {
     const newLog: DataChangeLog = {

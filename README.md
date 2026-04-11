@@ -45,6 +45,8 @@
      - `manager2 / manager123`
      - `tech / tech123`
       - `student / student123` (guest/student role)
+      - `student2 / student123` (student role)
+      - `instructor1 / instructor123` (instructor role)
 
   ## Live MQTT Integration (ESP32)
 

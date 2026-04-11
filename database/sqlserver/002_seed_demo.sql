@@ -9,7 +9,8 @@ MERGE smartlab.[Role] AS target
 USING (VALUES
     (1, 'ADMIN', 'Administrator'),
     (2, 'TECHNICIAN', 'Technician'),
-    (3, 'STUDENT', 'Student')
+  (3, 'STUDENT', 'Student'),
+  (4, 'INSTRUCTOR', 'Instructor')
 ) AS source (RoleId, RoleCode, RoleName)
 ON target.RoleId = source.RoleId
 WHEN MATCHED THEN
@@ -38,6 +39,14 @@ WHERE NOT EXISTS (SELECT 1 FROM smartlab.[User] WHERE Username = 'tech');
 INSERT INTO smartlab.[User] (Username, Email, PasswordHash, DisplayName, RoleId, AccountStatus)
 SELECT 'student', 'student@smartlab.local', 'student123', 'Guest Student', 3, 'active'
 WHERE NOT EXISTS (SELECT 1 FROM smartlab.[User] WHERE Username = 'student');
+
+INSERT INTO smartlab.[User] (Username, Email, PasswordHash, DisplayName, RoleId, AccountStatus)
+SELECT 'student2', 'student2@smartlab.local', 'student123', 'Student Nguyen', 3, 'active'
+WHERE NOT EXISTS (SELECT 1 FROM smartlab.[User] WHERE Username = 'student2');
+
+INSERT INTO smartlab.[User] (Username, Email, PasswordHash, DisplayName, RoleId, AccountStatus)
+SELECT 'instructor1', 'instructor1@smartlab.local', 'instructor123', 'Dr. Lan Instructor', 4, 'active'
+WHERE NOT EXISTS (SELECT 1 FROM smartlab.[User] WHERE Username = 'instructor1');
 
 UPDATE smartlab.[User]
 SET PasswordHash = 'admin123',
@@ -68,6 +77,18 @@ SET PasswordHash = 'student123',
     AccountStatus = 'active',
     UpdatedAt = SYSUTCDATETIME()
 WHERE Username = 'student';
+
+UPDATE smartlab.[User]
+SET PasswordHash = 'student123',
+    AccountStatus = 'active',
+    UpdatedAt = SYSUTCDATETIME()
+WHERE Username = 'student2';
+
+UPDATE smartlab.[User]
+SET PasswordHash = 'instructor123',
+    AccountStatus = 'active',
+    UpdatedAt = SYSUTCDATETIME()
+WHERE Username = 'instructor1';
 GO
 
 -- Lab A is prepared for real telemetry onboarding: no prefilled demo sensor values.
@@ -171,6 +192,16 @@ SELECT u.UserId, l.LabId
 FROM smartlab.[User] u
 CROSS JOIN smartlab.Lab l
 WHERE u.Username = 'tech'
+  AND NOT EXISTS (
+      SELECT 1 FROM smartlab.UserLabAssignment x
+      WHERE x.UserId = u.UserId AND x.LabId = l.LabId
+  );
+
+INSERT INTO smartlab.UserLabAssignment (UserId, LabId)
+SELECT u.UserId, l.LabId
+FROM smartlab.[User] u
+INNER JOIN smartlab.Lab l ON l.LabCode IN ('lab-02', 'lab-03')
+WHERE u.Username = 'instructor1'
   AND NOT EXISTS (
       SELECT 1 FROM smartlab.UserLabAssignment x
       WHERE x.UserId = u.UserId AND x.LabId = l.LabId

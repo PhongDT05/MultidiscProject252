@@ -33,7 +33,7 @@ export function UserManagement() {
   const [newUser, setNewUser] = useState<Partial<UserData>>({
     name: '',
     username: '',
-    role: 'technician',
+    role: 'instructor',
     status: 'active'
   });
   const [resetPasswordUserId, setResetPasswordUserId] = useState<string | null>(null);
@@ -64,6 +64,8 @@ export function UserManagement() {
         return <ShieldCheck className="w-4 h-4 text-purple-600" />;
       case 'technician':
         return <ShieldAlert className="w-4 h-4 text-green-600" />;
+      case 'instructor':
+        return <ShieldAlert className="w-4 h-4 text-amber-600" />;
       case 'student':
         return <Shield className="w-4 h-4 text-slate-600" />;
     }
@@ -75,6 +77,8 @@ export function UserManagement() {
         return 'bg-purple-100 text-purple-800 border-purple-200';
       case 'technician':
         return 'bg-green-100 text-green-800 border-green-200';
+      case 'instructor':
+        return 'bg-amber-100 text-amber-800 border-amber-200';
       case 'student':
         return 'bg-slate-100 text-slate-800 border-slate-200';
     }
@@ -170,7 +174,7 @@ export function UserManagement() {
     setNewUser({
       name: '',
       username: '',
-      role: 'technician',
+      role: 'instructor',
       status: 'active'
     });
     setShowAddUser(false);
@@ -179,6 +183,7 @@ export function UserManagement() {
   const roleStats = {
     admin: users.filter(u => u.role === 'admin').length,
     technician: users.filter(u => u.role === 'technician').length,
+    instructor: users.filter(u => u.role === 'instructor').length,
     student: users.filter(u => u.role === 'student').length,
   };
 
@@ -226,7 +231,7 @@ export function UserManagement() {
       )}
 
       {/* Role Statistics */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
         <div className="bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200 rounded-lg p-4">
           <div className="flex items-center gap-3 mb-2">
             <ShieldCheck className="w-6 h-6 text-purple-600" />
@@ -241,6 +246,14 @@ export function UserManagement() {
             <h3 className="font-medium text-green-900">Technicians</h3>
           </div>
           <p className="text-3xl font-bold text-green-900">{roleStats.technician}</p>
+        </div>
+
+        <div className="bg-gradient-to-br from-amber-50 to-amber-100 border border-amber-200 rounded-lg p-4">
+          <div className="flex items-center gap-3 mb-2">
+            <ShieldAlert className="w-6 h-6 text-amber-600" />
+            <h3 className="font-medium text-amber-900">Instructors</h3>
+          </div>
+          <p className="text-3xl font-bold text-amber-900">{roleStats.instructor}</p>
         </div>
 
         <div className="bg-gradient-to-br from-slate-50 to-slate-100 border border-slate-200 rounded-lg p-4">
@@ -302,6 +315,7 @@ export function UserManagement() {
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="technician">Technician</option>
+                <option value="instructor">Instructor</option>
                 <option value="student">Student</option>
                 <option value="admin">Administrator</option>
               </select>
@@ -445,7 +459,7 @@ export function UserManagement() {
 
       {/* Edit User Modal */}
       {editingUser && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 flex items-center justify-center p-4 z-50 bg-transparent">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-slate-900">Edit User</h3>
@@ -501,6 +515,7 @@ export function UserManagement() {
                   disabled={editingUser.id === currentUser?.id}
                 >
                   <option value="technician">Technician</option>
+                  <option value="instructor">Instructor</option>
                   <option value="student">Student</option>
                   <option value="admin">Administrator</option>
                 </select>

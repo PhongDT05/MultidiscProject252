@@ -8,12 +8,12 @@ import { Toaster } from "./components/ui/sonner";
 export default function App() {
   return (
     <AuthProvider>
-      <AppDataProvider>
-        <DataLogProvider>
+      <DataLogProvider>
+        <AppDataProvider>
           <RouterProvider router={router} />
           <Toaster />
-        </DataLogProvider>
-      </AppDataProvider>
+        </AppDataProvider>
+      </DataLogProvider>
     </AuthProvider>
   );
 }

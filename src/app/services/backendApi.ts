@@ -1,6 +1,26 @@
 import type { LabRoom } from '../data/labData';
 import type { ManagedUser, User } from '../types/auth';
 
+export interface TelemetrySnapshot {
+  id: string;
+  temperature: number;
+  humidity: number;
+  co2Level: number;
+  lightLevel: number;
+  occupancy: number;
+  presenceDetected: boolean;
+}
+
+export interface LabRecommendation {
+  id: string;
+  labId: string;
+  message: string;
+  status: 'pending' | 'reviewed' | 'dismissed';
+  createdAt: string;
+  studentName: string;
+  instructorName: string;
+}
+
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL?.toString() || 'http://localhost:4000').replace(/\/$/, '');
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -98,5 +118,24 @@ export const backendApi = {
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Failed to reset password.' };
     }
+  },
+
+  async recordTelemetrySnapshots(labs: TelemetrySnapshot[], recordedAt: string): Promise<void> {
+    await request<{ ok: boolean }>('/api/telemetry/snapshots', {
+      method: 'POST',
+      body: JSON.stringify({ labs, recordedAt }),
+    });
+  },
+
+  async getRecommendations(labId?: string): Promise<LabRecommendation[]> {
+    const search = labId ? `?labId=${encodeURIComponent(labId)}` : '';
+    return request<LabRecommendation[]>(`/api/recommendations${search}`);
+  },
+
+  async sendRecommendation(labId: string, studentUserId: string, message: string): Promise<void> {
+    await request<{ ok: boolean }>('/api/recommendations', {
+      method: 'POST',
+      body: JSON.stringify({ labId, studentUserId, message }),
+    });
   },
 };

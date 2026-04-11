@@ -17,10 +17,11 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Role hierarchy: admin > technician > student
+// Role hierarchy: admin > technician > instructor > student
 const roleHierarchy: Record<UserRole, number> = {
-  admin: 3,
-  technician: 2,
+  admin: 4,
+  technician: 3,
+  instructor: 2,
   student: 1,
 };
 

@@ -14,11 +14,14 @@ import { toast } from 'sonner';
 
 // UC1 - Threshold Configuration
 export function ThresholdConfig() {
-  const { user } = useAuth();
+  const { user, canAccessLab } = useAuth();
   const { labs } = useAppData();
   const [selectedRoom, setSelectedRoom] = useState<string>(labs[0]?.id ?? 'lab-01');
   const [thresholds, setThresholds] = useState<Record<string, ThresholdConfigType>>(defaultThresholds);
   const [hasChanges, setHasChanges] = useState(false);
+  const [instructorUpdateTracker, setInstructorUpdateTracker] = useState<Record<string, string>>({});
+
+  const INSTRUCTOR_UPDATE_KEY = 'lab_threshold_instructor_updates_v1';
 
   useEffect(() => {
     // Load saved thresholds from localStorage
@@ -30,10 +33,44 @@ export function ThresholdConfig() {
         console.error('Failed to load thresholds:', error);
       }
     }
+
+    const trackerRaw = localStorage.getItem(INSTRUCTOR_UPDATE_KEY);
+    if (trackerRaw) {
+      try {
+        setInstructorUpdateTracker(JSON.parse(trackerRaw));
+      } catch (error) {
+        console.error('Failed to load instructor threshold update tracker:', error);
+      }
+    }
   }, []);
+
+  const isAdmin = user?.role === 'admin';
+  const isInstructor = user?.role === 'instructor';
+  const selectableLabs = isInstructor ? labs.filter((lab) => canAccessLab(lab.id)) : labs;
+
+  useEffect(() => {
+    if (selectableLabs.length === 0) return;
+    if (!selectableLabs.some((lab) => lab.id === selectedRoom)) {
+      setSelectedRoom(selectableLabs[0].id);
+    }
+  }, [selectedRoom, selectableLabs]);
 
   const currentThreshold = thresholds[selectedRoom];
   const currentRoom = labs.find(r => r.id === selectedRoom);
+  const lastInstructorUpdateAt = instructorUpdateTracker[selectedRoom];
+  const now = Date.now();
+  const elapsedMs = lastInstructorUpdateAt ? now - new Date(lastInstructorUpdateAt).getTime() : Number.POSITIVE_INFINITY;
+  const cooldownMs = 24 * 60 * 60 * 1000;
+  const instructorCanEditNow = !lastInstructorUpdateAt || elapsedMs >= cooldownMs;
+  const cooldownHoursLeft = Math.max(0, Math.ceil((cooldownMs - elapsedMs) / (60 * 60 * 1000)));
+  const canEditThresholds = Boolean(
+    isAdmin ||
+      (isInstructor && canAccessLab(selectedRoom) && instructorCanEditNow),
+  );
+
+  if (!currentThreshold) {
+    return null;
+  }
 
   const updateThreshold = (category: keyof ThresholdConfigType, field: string, value: number) => {
     setThresholds(prev => ({
@@ -51,6 +88,16 @@ export function ThresholdConfig() {
 
   const saveThresholds = () => {
     localStorage.setItem('lab_thresholds', JSON.stringify(thresholds));
+
+    if (isInstructor && !isAdmin) {
+      const nextTracker = {
+        ...instructorUpdateTracker,
+        [selectedRoom]: new Date().toISOString(),
+      };
+      setInstructorUpdateTracker(nextTracker);
+      localStorage.setItem(INSTRUCTOR_UPDATE_KEY, JSON.stringify(nextTracker));
+    }
+
     setHasChanges(false);
     toast.success('Threshold Configuration Saved', {
       description: `Settings for ${currentRoom?.name} have been updated successfully.`,
@@ -83,11 +130,15 @@ export function ThresholdConfig() {
       </div>
 
       {/* Permission Check */}
-      {user?.role !== 'admin' && (
+      {!isAdmin && (
         <Alert className="border-red-200 bg-red-50">
           <AlertTriangle className="h-4 w-4 text-red-600" />
           <AlertDescription className="text-red-800">
-            Only Lab Administrators can modify threshold configurations. Contact your admin for changes.
+            {isInstructor
+              ? (canEditThresholds
+                ? 'Instructor mode: you can update thresholds only for your assigned labs. Each lab can be updated once every 24 hours.'
+                : `Instructor cooldown active for this lab. You can update again in about ${cooldownHoursLeft} hour(s).`)
+              : 'Only Lab Administrators can modify threshold configurations. Contact your admin for changes.'}
           </AlertDescription>
         </Alert>
       )}
@@ -104,7 +155,7 @@ export function ThresholdConfig() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {labs.map(room => (
+              {selectableLabs.map(room => (
                 <SelectItem key={room.id} value={room.id}>
                   <div className="flex items-center gap-2">
                     <div className={`w-2 h-2 rounded-full ${
@@ -216,7 +267,7 @@ export function ThresholdConfig() {
                 type="number"
                 value={currentThreshold.temperature.warningMin}
                 onChange={(e) => updateThreshold('temperature', 'warningMin', parseFloat(e.target.value))}
-                disabled={user?.role !== 'admin'}
+                disabled={!canEditThresholds}
                 className="mt-1"
               />
               <p className="text-xs text-slate-500 mt-1">Warning when approaching minimum</p>
@@ -228,7 +279,7 @@ export function ThresholdConfig() {
                 type="number"
                 value={currentThreshold.temperature.warningMax}
                 onChange={(e) => updateThreshold('temperature', 'warningMax', parseFloat(e.target.value))}
-                disabled={user?.role !== 'admin'}
+                disabled={!canEditThresholds}
                 className="mt-1"
               />
               <p className="text-xs text-slate-500 mt-1">Warning when approaching maximum</p>
@@ -255,7 +306,7 @@ export function ThresholdConfig() {
                 type="number"
                 value={currentThreshold.humidity.warningMin}
                 onChange={(e) => updateThreshold('humidity', 'warningMin', parseFloat(e.target.value))}
-                disabled={user?.role !== 'admin'}
+                disabled={!canEditThresholds}
                 className="mt-1"
               />
             </div>
@@ -266,7 +317,7 @@ export function ThresholdConfig() {
                 type="number"
                 value={currentThreshold.humidity.warningMax}
                 onChange={(e) => updateThreshold('humidity', 'warningMax', parseFloat(e.target.value))}
-                disabled={user?.role !== 'admin'}
+                disabled={!canEditThresholds}
                 className="mt-1"
               />
             </div>
@@ -292,7 +343,7 @@ export function ThresholdConfig() {
                 type="number"
                 value={currentThreshold.co2Level.warningMax}
                 onChange={(e) => updateThreshold('co2Level', 'warningMax', parseFloat(e.target.value))}
-                disabled={user?.role !== 'admin'}
+                disabled={!canEditThresholds}
                 className="mt-1"
               />
               <p className="text-xs text-slate-500 mt-1">Activate increased ventilation</p>
@@ -319,7 +370,7 @@ export function ThresholdConfig() {
                 type="number"
                 value={currentThreshold.lightLevel.min}
                 onChange={(e) => updateThreshold('lightLevel', 'min', parseFloat(e.target.value))}
-                disabled={user?.role !== 'admin'}
+                disabled={!canEditThresholds}
                 className="mt-1"
               />
               <p className="text-xs text-slate-500 mt-1">Activate lighting when below</p>
@@ -331,7 +382,7 @@ export function ThresholdConfig() {
                 type="number"
                 value={currentThreshold.lightLevel.max}
                 onChange={(e) => updateThreshold('lightLevel', 'max', parseFloat(e.target.value))}
-                disabled={user?.role !== 'admin'}
+                disabled={!canEditThresholds}
                 className="mt-1"
               />
               <p className="text-xs text-slate-500 mt-1">Dim lights when exceeded</p>
@@ -345,7 +396,7 @@ export function ThresholdConfig() {
         <Button
           variant="outline"
           onClick={resetToDefaults}
-          disabled={user?.role !== 'admin'}
+          disabled={!isAdmin}
         >
           Reset to Defaults
         </Button>
@@ -358,7 +409,7 @@ export function ThresholdConfig() {
           )}
           <Button
             onClick={saveThresholds}
-            disabled={user?.role !== 'admin' || !hasChanges}
+            disabled={!canEditThresholds || !hasChanges}
             className="gap-2"
           >
             <Save className="w-4 h-4" />

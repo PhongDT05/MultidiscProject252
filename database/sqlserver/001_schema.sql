@@ -278,6 +278,24 @@ CREATE TABLE smartlab.DataChangeLog (
 );
 GO
 
+CREATE TABLE smartlab.LabRecommendation (
+    LabRecommendationId BIGINT IDENTITY(1,1) NOT NULL,
+    RecommendationCode VARCHAR(50) NOT NULL,
+    LabId BIGINT NOT NULL,
+    StudentUserId BIGINT NOT NULL,
+    InstructorUserId BIGINT NOT NULL,
+    [Message] NVARCHAR(1000) NOT NULL,
+    [Status] VARCHAR(20) NOT NULL CONSTRAINT DF_LabRecommendation_Status DEFAULT ('pending'),
+    CreatedAt DATETIME2(3) NOT NULL CONSTRAINT DF_LabRecommendation_CreatedAt DEFAULT (SYSUTCDATETIME()),
+    CONSTRAINT PK_LabRecommendation PRIMARY KEY (LabRecommendationId),
+    CONSTRAINT UQ_LabRecommendation_RecommendationCode UNIQUE (RecommendationCode),
+    CONSTRAINT FK_LabRecommendation_Lab FOREIGN KEY (LabId) REFERENCES smartlab.Lab(LabId),
+    CONSTRAINT FK_LabRecommendation_Student FOREIGN KEY (StudentUserId) REFERENCES smartlab.[User](UserId),
+    CONSTRAINT FK_LabRecommendation_Instructor FOREIGN KEY (InstructorUserId) REFERENCES smartlab.[User](UserId),
+    CONSTRAINT CK_LabRecommendation_Status CHECK ([Status] IN ('pending', 'reviewed', 'dismissed'))
+);
+GO
+
 CREATE TABLE smartlab.SystemSetting (
     SettingKey VARCHAR(100) NOT NULL,
     SettingValue NVARCHAR(MAX) NOT NULL,
@@ -302,4 +320,5 @@ CREATE INDEX IX_AuditEvent_OccurredAt ON smartlab.AuditEvent (OccurredAt DESC);
 CREATE INDEX IX_AuditEvent_Category_OccurredAt ON smartlab.AuditEvent (Category, OccurredAt DESC);
 CREATE INDEX IX_DataChangeLog_ChangedAt ON smartlab.DataChangeLog (ChangedAt DESC);
 CREATE INDEX IX_DataChangeLog_LabId_ChangedAt ON smartlab.DataChangeLog (LabId, ChangedAt DESC);
+CREATE INDEX IX_LabRecommendation_LabId_CreatedAt ON smartlab.LabRecommendation (LabId, CreatedAt DESC);
 GO

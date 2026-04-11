@@ -31,6 +31,7 @@ export function ChangeLog({ roomId, maxHeight = '600px', showFilters = true }: C
   const { logs, clearLogs, getLogsByRoom } = useDataLog();
   const [filterType, setFilterType] = useState<ChangeType | 'all'>('all');
   const [filterRoom, setFilterRoom] = useState<string>('all');
+  const [timeWindow, setTimeWindow] = useState<string>('all');
 
   // Get filtered logs
   const filteredLogs = useMemo(() => {
@@ -44,8 +45,17 @@ export function ChangeLog({ roomId, maxHeight = '600px', showFilters = true }: C
       filtered = filtered.filter(log => log.roomId === filterRoom);
     }
 
+    if (timeWindow !== 'all') {
+      const now = Date.now();
+      const windowMinutes = Number.parseInt(timeWindow, 10);
+      if (Number.isFinite(windowMinutes) && windowMinutes > 0) {
+        const cutoff = now - windowMinutes * 60 * 1000;
+        filtered = filtered.filter((log) => log.timestamp.getTime() >= cutoff);
+      }
+    }
+
     return filtered;
-  }, [logs, roomId, filterType, filterRoom, getLogsByRoom]);
+  }, [logs, roomId, filterType, filterRoom, timeWindow, getLogsByRoom]);
 
   // Get unique rooms
   const uniqueRooms = useMemo(() => {
@@ -199,6 +209,29 @@ export function ChangeLog({ roomId, maxHeight = '600px', showFilters = true }: C
                 </Select>
               </div>
             )}
+
+            <div className="flex-1">
+              <Select value={timeWindow} onValueChange={setTimeWindow}>
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="Filter by time" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Time</SelectItem>
+                  <SelectItem value="5">Last 5 minutes</SelectItem>
+                  <SelectItem value="10">Last 10 minutes</SelectItem>
+                  <SelectItem value="20">Last 20 minutes</SelectItem>
+                  <SelectItem value="40">Last 40 minutes</SelectItem>
+                  <SelectItem value="60">Last 1 hour</SelectItem>
+                  <SelectItem value="120">Last 2 hours</SelectItem>
+                  <SelectItem value="180">Last 3 hours</SelectItem>
+                  <SelectItem value="240">Last 4 hours</SelectItem>
+                  <SelectItem value="300">Last 5 hours</SelectItem>
+                  <SelectItem value="360">Last 6 hours</SelectItem>
+                  <SelectItem value="480">Last 8 hours</SelectItem>
+                  <SelectItem value="720">Last 12 hours</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         )}
 

@@ -9,6 +9,31 @@ const PORT = Number(process.env.API_PORT || 4000);
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '1mb' }));
 
+async function assertLabsAreAvailableForInstructor(requestFactory, labs, excludeUserId = null) {
+  for (const rawLabCode of labs) {
+    const checkReq = requestFactory();
+    checkReq.input('labCode', sql.VarChar(30), String(rawLabCode));
+    checkReq.input('excludeUserId', sql.BigInt, excludeUserId);
+
+    const existingInstructor = await checkReq.query(
+      `SELECT TOP 1 l.LabCode, u.DisplayName
+       FROM smartlab.UserLabAssignment ula
+       INNER JOIN smartlab.[User] u ON u.UserId = ula.UserId
+       INNER JOIN smartlab.[Role] r ON r.RoleId = u.RoleId
+       INNER JOIN smartlab.Lab l ON l.LabId = ula.LabId
+       WHERE u.DeletedAt IS NULL
+         AND r.RoleCode = 'INSTRUCTOR'
+         AND l.LabCode = @labCode
+         AND (@excludeUserId IS NULL OR u.UserId <> @excludeUserId)`,
+    );
+
+    if (existingInstructor.recordset[0]) {
+      const conflict = existingInstructor.recordset[0];
+      throw new Error(`Lab ${conflict.LabCode} is already managed by instructor ${conflict.DisplayName}.`);
+    }
+  }
+}
+
 app.get('/api/health', async (_req, res) => {
   try {
     await query('SELECT 1 AS Ok');
@@ -69,80 +94,118 @@ app.get('/api/users', async (_req, res) => {
 app.post('/api/users', async (req, res) => {
   const body = req.body || {};
   const roleCode = roleCodeFromUi(body.role);
+  const labs = Array.isArray(body.assignedLabs) ? body.assignedLabs : [];
 
-  await executeInTransaction(async (requestFactory) => {
-    const request = requestFactory();
-    request.input('username', sql.VarChar(50), String(body.username || '').toLowerCase());
-    request.input('email', sql.VarChar(255), String(body.email || '').toLowerCase());
-    request.input('displayName', sql.NVarChar(100), String(body.name || ''));
-    request.input('roleCode', sql.VarChar(20), roleCode);
-    request.input('status', sql.VarChar(20), body.status === 'inactive' ? 'inactive' : 'active');
-    request.input('password', sql.VarChar(255), 'smartlab123');
+  try {
+    await executeInTransaction(async (requestFactory) => {
+      if (roleCode === 'INSTRUCTOR') {
+        await assertLabsAreAvailableForInstructor(requestFactory, labs);
+      }
 
-    const inserted = await request.query(
-      `INSERT INTO smartlab.[User] (Username, Email, PasswordHash, DisplayName, RoleId, AccountStatus)
-       OUTPUT INSERTED.UserId
-       SELECT @username, @email, @password, @displayName, r.RoleId, @status
-       FROM smartlab.[Role] r WHERE r.RoleCode = @roleCode`,
-    );
+      const request = requestFactory();
+      request.input('username', sql.VarChar(50), String(body.username || '').toLowerCase());
+      request.input('email', sql.VarChar(255), String(body.email || '').toLowerCase());
+      request.input('displayName', sql.NVarChar(100), String(body.name || ''));
+      request.input('roleCode', sql.VarChar(20), roleCode);
+      request.input('status', sql.VarChar(20), body.status === 'inactive' ? 'inactive' : 'active');
+      request.input('password', sql.VarChar(255), 'smartlab123');
 
-    const userId = inserted.recordset[0]?.UserId;
-    const labs = Array.isArray(body.assignedLabs) ? body.assignedLabs : [];
-
-    for (const labCode of labs) {
-      const assignReq = requestFactory();
-      assignReq.input('userId', sql.BigInt, userId);
-      assignReq.input('labCode', sql.VarChar(30), String(labCode));
-      await assignReq.query(
-        `INSERT INTO smartlab.UserLabAssignment (UserId, LabId)
-         SELECT @userId, l.LabId FROM smartlab.Lab l WHERE l.LabCode = @labCode`,
+      const inserted = await request.query(
+        `INSERT INTO smartlab.[User] (Username, Email, PasswordHash, DisplayName, RoleId, AccountStatus)
+         OUTPUT INSERTED.UserId
+         SELECT @username, @email, @password, @displayName, r.RoleId, @status
+         FROM smartlab.[Role] r WHERE r.RoleCode = @roleCode`,
       );
-    }
-  });
 
-  res.status(201).json({ ok: true });
+      const userId = inserted.recordset[0]?.UserId;
+      for (const labCode of labs) {
+        const assignReq = requestFactory();
+        assignReq.input('userId', sql.BigInt, userId);
+        assignReq.input('labCode', sql.VarChar(30), String(labCode));
+        await assignReq.query(
+          `INSERT INTO smartlab.UserLabAssignment (UserId, LabId)
+           SELECT @userId, l.LabId FROM smartlab.Lab l WHERE l.LabCode = @labCode`,
+        );
+      }
+    });
+
+    res.status(201).json({ ok: true });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : 'Unable to create user.' });
+  }
 });
 
 app.patch('/api/users/:id', async (req, res) => {
   const userId = Number(req.params.id);
   const body = req.body || {};
 
-  await executeInTransaction(async (requestFactory) => {
-    const request = requestFactory();
-    request.input('userId', sql.BigInt, userId);
-    request.input('email', sql.VarChar(255), body.email ? String(body.email).toLowerCase() : null);
-    request.input('displayName', sql.NVarChar(100), body.name ? String(body.name) : null);
-    request.input('status', sql.VarChar(20), body.status ? String(body.status) : null);
-    request.input('roleCode', sql.VarChar(20), body.role ? roleCodeFromUi(body.role) : null);
+  try {
+    await executeInTransaction(async (requestFactory) => {
+      const currentReq = requestFactory();
+      currentReq.input('userId', sql.BigInt, userId);
+      const currentUserRows = await currentReq.query(
+        `SELECT u.UserId, r.RoleCode,
+                STRING_AGG(l.LabCode, ',') WITHIN GROUP (ORDER BY l.LabCode) AS AssignedLabs
+         FROM smartlab.[User] u
+         INNER JOIN smartlab.[Role] r ON r.RoleId = u.RoleId
+         LEFT JOIN smartlab.UserLabAssignment ula ON ula.UserId = u.UserId
+         LEFT JOIN smartlab.Lab l ON l.LabId = ula.LabId
+         WHERE u.UserId = @userId AND u.DeletedAt IS NULL
+         GROUP BY u.UserId, r.RoleCode`,
+      );
 
-    await request.query(
-      `UPDATE u
-       SET u.Email = COALESCE(@email, u.Email),
-           u.DisplayName = COALESCE(@displayName, u.DisplayName),
-           u.AccountStatus = COALESCE(@status, u.AccountStatus),
-           u.RoleId = COALESCE((SELECT r.RoleId FROM smartlab.[Role] r WHERE r.RoleCode = @roleCode), u.RoleId),
-           u.UpdatedAt = SYSUTCDATETIME()
-       FROM smartlab.[User] u
-       WHERE u.UserId = @userId`,
-    );
-
-    if (Array.isArray(body.assignedLabs)) {
-      const delReq = requestFactory();
-      delReq.input('userId', sql.BigInt, userId);
-      await delReq.query('DELETE FROM smartlab.UserLabAssignment WHERE UserId = @userId');
-      for (const labCode of body.assignedLabs) {
-        const insReq = requestFactory();
-        insReq.input('userId', sql.BigInt, userId);
-        insReq.input('labCode', sql.VarChar(30), String(labCode));
-        await insReq.query(
-          `INSERT INTO smartlab.UserLabAssignment (UserId, LabId)
-           SELECT @userId, l.LabId FROM smartlab.Lab l WHERE l.LabCode = @labCode`,
-        );
+      const currentUser = currentUserRows.recordset[0];
+      if (!currentUser) {
+        throw new Error('User not found.');
       }
-    }
-  });
 
-  res.json({ ok: true });
+      const targetRoleCode = body.role ? roleCodeFromUi(body.role) : currentUser.RoleCode;
+      const targetLabs = Array.isArray(body.assignedLabs)
+        ? body.assignedLabs
+        : (currentUser.AssignedLabs ? String(currentUser.AssignedLabs).split(',').filter(Boolean) : []);
+
+      if (targetRoleCode === 'INSTRUCTOR') {
+        await assertLabsAreAvailableForInstructor(requestFactory, targetLabs, userId);
+      }
+
+      const request = requestFactory();
+      request.input('userId', sql.BigInt, userId);
+      request.input('email', sql.VarChar(255), body.email ? String(body.email).toLowerCase() : null);
+      request.input('displayName', sql.NVarChar(100), body.name ? String(body.name) : null);
+      request.input('status', sql.VarChar(20), body.status ? String(body.status) : null);
+      request.input('roleCode', sql.VarChar(20), body.role ? roleCodeFromUi(body.role) : null);
+
+      await request.query(
+        `UPDATE u
+         SET u.Email = COALESCE(@email, u.Email),
+             u.DisplayName = COALESCE(@displayName, u.DisplayName),
+             u.AccountStatus = COALESCE(@status, u.AccountStatus),
+             u.RoleId = COALESCE((SELECT r.RoleId FROM smartlab.[Role] r WHERE r.RoleCode = @roleCode), u.RoleId),
+             u.UpdatedAt = SYSUTCDATETIME()
+         FROM smartlab.[User] u
+         WHERE u.UserId = @userId`,
+      );
+
+      if (Array.isArray(body.assignedLabs)) {
+        const delReq = requestFactory();
+        delReq.input('userId', sql.BigInt, userId);
+        await delReq.query('DELETE FROM smartlab.UserLabAssignment WHERE UserId = @userId');
+        for (const labCode of body.assignedLabs) {
+          const insReq = requestFactory();
+          insReq.input('userId', sql.BigInt, userId);
+          insReq.input('labCode', sql.VarChar(30), String(labCode));
+          await insReq.query(
+            `INSERT INTO smartlab.UserLabAssignment (UserId, LabId)
+             SELECT @userId, l.LabId FROM smartlab.Lab l WHERE l.LabCode = @labCode`,
+          );
+        }
+      }
+    });
+
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : 'Unable to update user.' });
+  }
 });
 
 app.delete('/api/users/:id', async (req, res) => {
@@ -421,6 +484,156 @@ app.put('/api/labs', async (req, res) => {
   });
 
   res.json({ ok: true });
+});
+
+app.post('/api/telemetry/snapshots', async (req, res) => {
+  const payloadLabs = Array.isArray(req.body?.labs) ? req.body.labs : [];
+  const recordedAt = req.body?.recordedAt ? new Date(req.body.recordedAt) : new Date();
+
+  if (payloadLabs.length === 0) {
+    return res.status(400).json({ error: 'At least one lab snapshot is required.' });
+  }
+
+  await executeInTransaction(async (requestFactory) => {
+    for (const snapshot of payloadLabs) {
+      const request = requestFactory();
+      request.input('labCode', sql.VarChar(30), String(snapshot.id || snapshot.labId || ''));
+      request.input('recordedAt', sql.DateTime2, recordedAt);
+      request.input('temperature', sql.Decimal(5, 2), Number(snapshot.temperature));
+      request.input('humidity', sql.Decimal(5, 2), Number(snapshot.humidity));
+      request.input('co2Level', sql.Decimal(8, 2), Number(snapshot.co2Level));
+      request.input('lightLevel', sql.Decimal(8, 2), Number(snapshot.lightLevel));
+      request.input('occupancy', sql.Int, Number(snapshot.occupancy));
+      request.input('presenceDetected', sql.Bit, snapshot.presenceDetected ? 1 : 0);
+
+      await request.query(
+        `INSERT INTO smartlab.TelemetryReading (LabId, RecordedAt, Temperature, Humidity, Co2Level, LightLevel, Occupancy, PresenceDetected)
+         SELECT l.LabId, @recordedAt, @temperature, @humidity, @co2Level, @lightLevel, @occupancy, @presenceDetected
+         FROM smartlab.Lab l
+         WHERE l.LabCode = @labCode`,
+      );
+    }
+  });
+
+  res.json({ ok: true, recordedAt: recordedAt.toISOString(), count: payloadLabs.length });
+});
+
+app.get('/api/telemetry/history', async (req, res) => {
+  const labId = String(req.query.labId || '').trim();
+  const minutes = Math.max(1, Math.min(12 * 60, Number(req.query.minutes || 60)));
+
+  if (!labId) {
+    return res.status(400).json({ error: 'labId is required.' });
+  }
+
+  const rows = await query(
+    `SELECT tr.RecordedAt, tr.Temperature, tr.Humidity, tr.Co2Level, tr.LightLevel, tr.Occupancy, tr.PresenceDetected
+     FROM smartlab.TelemetryReading tr
+     INNER JOIN smartlab.Lab l ON l.LabId = tr.LabId
+     WHERE l.LabCode = @labCode
+       AND tr.RecordedAt >= DATEADD(MINUTE, -@minutes, SYSUTCDATETIME())
+     ORDER BY tr.RecordedAt DESC`,
+    { labCode: labId, minutes },
+  );
+
+  res.json(
+    rows.map((row) => ({
+      recordedAt: new Date(row.RecordedAt).toISOString(),
+      temperature: Number(row.Temperature ?? 0),
+      humidity: Number(row.Humidity ?? 0),
+      co2Level: Number(row.Co2Level ?? 0),
+      lightLevel: Number(row.LightLevel ?? 0),
+      occupancy: Number(row.Occupancy ?? 0),
+      presenceDetected: Boolean(row.PresenceDetected),
+    })),
+  );
+});
+
+app.get('/api/recommendations', async (req, res) => {
+  const labId = String(req.query.labId || '').trim();
+  const params = {};
+  let whereClause = '';
+
+  if (labId) {
+    whereClause = 'WHERE l.LabCode = @labCode';
+    params.labCode = labId;
+  }
+
+  const rows = await query(
+    `SELECT rec.RecommendationCode, rec.[Message], rec.[Status], rec.CreatedAt,
+            l.LabCode,
+            stu.DisplayName AS StudentName,
+            ins.DisplayName AS InstructorName
+     FROM smartlab.LabRecommendation rec
+     INNER JOIN smartlab.Lab l ON l.LabId = rec.LabId
+     INNER JOIN smartlab.[User] stu ON stu.UserId = rec.StudentUserId
+     INNER JOIN smartlab.[User] ins ON ins.UserId = rec.InstructorUserId
+     ${whereClause}
+     ORDER BY rec.CreatedAt DESC`,
+    params,
+  );
+
+  res.json(
+    rows.map((row) => ({
+      id: row.RecommendationCode,
+      labId: row.LabCode,
+      message: row.Message,
+      status: row.Status,
+      createdAt: new Date(row.CreatedAt).toISOString(),
+      studentName: row.StudentName,
+      instructorName: row.InstructorName,
+    })),
+  );
+});
+
+app.post('/api/recommendations', async (req, res) => {
+  const labId = String(req.body?.labId || '').trim();
+  const message = String(req.body?.message || '').trim();
+  const studentUserId = Number(req.body?.studentUserId);
+
+  if (!labId || !message || !studentUserId) {
+    return res.status(400).json({ error: 'labId, message and studentUserId are required.' });
+  }
+
+  const studentRows = await query(
+    `SELECT u.UserId
+     FROM smartlab.[User] u
+     INNER JOIN smartlab.[Role] r ON r.RoleId = u.RoleId
+     WHERE u.UserId = @studentUserId AND u.DeletedAt IS NULL AND r.RoleCode = 'STUDENT'`,
+    { studentUserId },
+  );
+
+  if (!studentRows[0]) {
+    return res.status(403).json({ error: 'Only students can send recommendations.' });
+  }
+
+  const instructorRows = await query(
+    `SELECT TOP 1 u.UserId
+     FROM smartlab.UserLabAssignment ula
+     INNER JOIN smartlab.Lab l ON l.LabId = ula.LabId
+     INNER JOIN smartlab.[User] u ON u.UserId = ula.UserId
+     INNER JOIN smartlab.[Role] r ON r.RoleId = u.RoleId
+     WHERE l.LabCode = @labCode
+       AND r.RoleCode = 'INSTRUCTOR'
+       AND u.DeletedAt IS NULL`,
+    { labCode: labId },
+  );
+
+  const instructorUserId = instructorRows[0]?.UserId;
+  if (!instructorUserId) {
+    return res.status(404).json({ error: 'No instructor is currently assigned to this lab.' });
+  }
+
+  const recommendationCode = `rec-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  await query(
+    `INSERT INTO smartlab.LabRecommendation (RecommendationCode, LabId, StudentUserId, InstructorUserId, [Message])
+     SELECT @recommendationCode, l.LabId, @studentUserId, @instructorUserId, @message
+     FROM smartlab.Lab l
+     WHERE l.LabCode = @labCode`,
+    { recommendationCode, labCode: labId, studentUserId, instructorUserId, message },
+  );
+
+  res.status(201).json({ ok: true, id: recommendationCode });
 });
 
 app.use((error, _req, res, _next) => {

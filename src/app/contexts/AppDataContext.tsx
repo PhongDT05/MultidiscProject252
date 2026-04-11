@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { labRooms, type LabRoom, type Alert, type IoTDevice, type Equipment, type Actuator } from '../data/labData';
 import { appApi } from '../services/appApi';
+import { useDataLog } from './DataLogContext';
 import {
   mqttTelemetryEnabled,
   subscribeMqttTelemetry,
@@ -32,6 +33,9 @@ interface AppDataContextType {
 const isTemperatureOptimal = (value: number) => value >= 20 && value <= 24;
 const isHumidityOptimal = (value: number) => value >= 40 && value <= 60;
 const isCO2Optimal = (value: number) => value < 500;
+const hasTemperatureReading = (value: number) => Number.isFinite(value) && value > 0;
+const hasHumidityReading = (value: number) => Number.isFinite(value) && value > 0;
+const hasCO2Reading = (value: number) => Number.isFinite(value) && value > 0;
 const mqttLabId = import.meta.env.VITE_MQTT_LAB_ID?.toString() ?? 'lab-01';
 const mqttTemperatureEpsilon = Number(import.meta.env.VITE_MQTT_TEMP_EPSILON ?? '0.1');
 const mqttHumidityEpsilon = Number(import.meta.env.VITE_MQTT_HUMIDITY_EPSILON ?? '1');
@@ -446,26 +450,29 @@ const upsertThresholdAlertsFromCurrentReadings = (room: LabRoom): LabRoom => {
     {
       reasonCode: 'TEMP_THRESHOLD',
       field: 'temperature',
+      hasReading: hasTemperatureReading(room.temperature),
       violated: !isTemperatureOptimal(room.temperature),
       formattedValue: `${room.temperature.toFixed(1)} C`,
     },
     {
       reasonCode: 'HUMIDITY_THRESHOLD',
       field: 'humidity',
+      hasReading: hasHumidityReading(room.humidity),
       violated: !isHumidityOptimal(room.humidity),
       formattedValue: `${room.humidity.toFixed(1)} %`,
     },
     {
       reasonCode: 'AIR_THRESHOLD',
       field: 'air',
+      hasReading: hasCO2Reading(room.co2Level),
       violated: !isCO2Optimal(room.co2Level),
       formattedValue: `${room.co2Level.toFixed(0)} ppm`,
     },
   ] as const;
 
   const newAlerts: Alert[] = thresholdViolations
-    .filter(({ violated, reasonCode }) => {
-      if (!violated) return false;
+    .filter(({ hasReading, violated, reasonCode }) => {
+      if (!hasReading || !violated) return false;
       return !room.alerts.some((alert) => alert.reasonCode === reasonCode && !alert.acknowledged);
     })
     .map(({ reasonCode, field, formattedValue }) => ({
@@ -690,6 +697,7 @@ const cloneInitialLabs = (): LabRoom[] =>
 const AppDataContext = createContext<AppDataContextType | undefined>(undefined);
 
 export function AppDataProvider({ children }: { children: ReactNode }) {
+  const { addLog } = useDataLog();
   const [labs, setLabs] = useState<LabRoom[]>(cloneInitialLabs());
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -791,6 +799,46 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (labs.length === 0) {
+      return;
+    }
+
+    const timer = setInterval(() => {
+      const recordedAt = new Date().toISOString();
+      const snapshots = labs.map((room) => ({
+        id: room.id,
+        temperature: room.temperature,
+        humidity: room.humidity,
+        co2Level: room.co2Level,
+        lightLevel: room.lightLevel,
+        occupancy: room.occupancy,
+        presenceDetected: room.presenceDetected,
+      }));
+
+      void appApi.recordTelemetrySnapshots(snapshots, recordedAt).catch(() => {
+        setError((prev) => prev || 'Telemetry snapshot sync is unavailable.');
+      });
+
+      for (const room of labs) {
+        addLog({
+          roomId: room.id,
+          roomName: room.name,
+          changeType: 'system',
+          field: 'telemetry_snapshot',
+          oldValue: '-',
+          newValue: `${room.temperature.toFixed(1)}C / ${room.humidity.toFixed(0)}% / ${room.co2Level.toFixed(0)}ppm`,
+          user: 'system',
+          description: '10-second telemetry snapshot recorded',
+        });
+      }
+    }, 10000);
+
+    return () => {
+      clearInterval(timer);
+    };
+  }, [labs, addLog]);
 
   const addUser = (user: ManagedUser) => {
     let previousUsers: ManagedUser[] = [];
