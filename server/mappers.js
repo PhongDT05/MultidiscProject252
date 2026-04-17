@@ -30,6 +30,7 @@ export function roleCodeFromUi(role) {
 }
 
 export function mapLabRow(row) {
+  const presenceDetected = Boolean(row.PresenceDetected);
   return {
     id: row.LabCode,
     name: row.LabName,
@@ -38,9 +39,7 @@ export function mapLabRow(row) {
     humidity: Number(row.Humidity ?? 0),
     co2Level: Number(row.Co2Level ?? 0),
     lightLevel: Number(row.LightLevel ?? 0),
-    occupancy: Number(row.Occupancy ?? 0),
-    maxOccupancy: Number(row.MaxOccupancy ?? 0),
-    presenceDetected: Boolean(row.PresenceDetected),
+    presenceDetected,
     equipment: [],
     alerts: [],
     iotDevices: [],

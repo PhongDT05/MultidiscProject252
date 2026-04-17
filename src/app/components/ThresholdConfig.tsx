@@ -19,29 +19,66 @@ export function ThresholdConfig() {
   const [selectedRoom, setSelectedRoom] = useState<string>(labs[0]?.id ?? 'lab-01');
   const [thresholds, setThresholds] = useState<Record<string, ThresholdConfigType>>(defaultThresholds);
   const [hasChanges, setHasChanges] = useState(false);
-  const [instructorUpdateTracker, setInstructorUpdateTracker] = useState<Record<string, string>>({});
+  const [instructorTempOverrideTracker, setInstructorTempOverrideTracker] = useState<Record<string, string>>({});
 
-  const INSTRUCTOR_UPDATE_KEY = 'lab_threshold_instructor_updates_v1';
+  const THRESHOLDS_KEY = 'lab_thresholds';
+  const INSTRUCTOR_TEMP_OVERRIDE_KEY = 'lab_threshold_instructor_temp_overrides_v1';
+
+  const getLocalDayKey = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
 
   useEffect(() => {
     // Load saved thresholds from localStorage
-    const saved = localStorage.getItem('lab_thresholds');
+    const saved = localStorage.getItem(THRESHOLDS_KEY);
+    let loadedThresholds = defaultThresholds;
     if (saved) {
       try {
-        setThresholds(JSON.parse(saved));
+        loadedThresholds = JSON.parse(saved);
       } catch (error) {
         console.error('Failed to load thresholds:', error);
       }
     }
 
-    const trackerRaw = localStorage.getItem(INSTRUCTOR_UPDATE_KEY);
+    const trackerRaw = localStorage.getItem(INSTRUCTOR_TEMP_OVERRIDE_KEY);
+    let nextTracker: Record<string, string> = {};
     if (trackerRaw) {
       try {
-        setInstructorUpdateTracker(JSON.parse(trackerRaw));
+        nextTracker = JSON.parse(trackerRaw);
       } catch (error) {
-        console.error('Failed to load instructor threshold update tracker:', error);
+        console.error('Failed to load instructor temporary override tracker:', error);
       }
     }
+
+    const todayKey = getLocalDayKey(new Date());
+    let didResetExpired = false;
+    const sanitizedTracker: Record<string, string> = {};
+
+    Object.entries(nextTracker).forEach(([labId, dayKey]) => {
+      if (dayKey === todayKey) {
+        sanitizedTracker[labId] = dayKey;
+        return;
+      }
+
+      if (defaultThresholds[labId]) {
+        loadedThresholds = {
+          ...loadedThresholds,
+          [labId]: defaultThresholds[labId],
+        };
+        didResetExpired = true;
+      }
+    });
+
+    if (didResetExpired) {
+      localStorage.setItem(THRESHOLDS_KEY, JSON.stringify(loadedThresholds));
+    }
+    localStorage.setItem(INSTRUCTOR_TEMP_OVERRIDE_KEY, JSON.stringify(sanitizedTracker));
+
+    setThresholds(loadedThresholds);
+    setInstructorTempOverrideTracker(sanitizedTracker);
   }, []);
 
   const isAdmin = user?.role === 'admin';
@@ -57,12 +94,13 @@ export function ThresholdConfig() {
 
   const currentThreshold = thresholds[selectedRoom];
   const currentRoom = labs.find(r => r.id === selectedRoom);
-  const lastInstructorUpdateAt = instructorUpdateTracker[selectedRoom];
-  const now = Date.now();
-  const elapsedMs = lastInstructorUpdateAt ? now - new Date(lastInstructorUpdateAt).getTime() : Number.POSITIVE_INFINITY;
-  const cooldownMs = 24 * 60 * 60 * 1000;
-  const instructorCanEditNow = !lastInstructorUpdateAt || elapsedMs >= cooldownMs;
-  const cooldownHoursLeft = Math.max(0, Math.ceil((cooldownMs - elapsedMs) / (60 * 60 * 1000)));
+  const todayKey = getLocalDayKey(new Date());
+  const hasActiveTemporaryOverride = instructorTempOverrideTracker[selectedRoom] === todayKey;
+  const nextDayStart = new Date();
+  nextDayStart.setHours(24, 0, 0, 0);
+  const msUntilReset = Math.max(0, nextDayStart.getTime() - Date.now());
+  const hoursUntilReset = Math.max(1, Math.ceil(msUntilReset / (60 * 60 * 1000)));
+  const instructorCanEditNow = canAccessLab(selectedRoom);
   const canEditThresholds = Boolean(
     isAdmin ||
       (isInstructor && canAccessLab(selectedRoom) && instructorCanEditNow),
@@ -87,26 +125,30 @@ export function ThresholdConfig() {
   };
 
   const saveThresholds = () => {
-    localStorage.setItem('lab_thresholds', JSON.stringify(thresholds));
+    localStorage.setItem(THRESHOLDS_KEY, JSON.stringify(thresholds));
 
     if (isInstructor && !isAdmin) {
       const nextTracker = {
-        ...instructorUpdateTracker,
-        [selectedRoom]: new Date().toISOString(),
+        ...instructorTempOverrideTracker,
+        [selectedRoom]: getLocalDayKey(new Date()),
       };
-      setInstructorUpdateTracker(nextTracker);
-      localStorage.setItem(INSTRUCTOR_UPDATE_KEY, JSON.stringify(nextTracker));
+      setInstructorTempOverrideTracker(nextTracker);
+      localStorage.setItem(INSTRUCTOR_TEMP_OVERRIDE_KEY, JSON.stringify(nextTracker));
     }
 
     setHasChanges(false);
     toast.success('Threshold Configuration Saved', {
-      description: `Settings for ${currentRoom?.name} have been updated successfully.`,
+      description: isInstructor && !isAdmin
+        ? `Temporary settings for ${currentRoom?.name} are active until the end of today.`
+        : `Settings for ${currentRoom?.name} have been updated successfully.`,
     });
   };
 
   const resetToDefaults = () => {
     setThresholds(defaultThresholds);
-    localStorage.setItem('lab_thresholds', JSON.stringify(defaultThresholds));
+    localStorage.setItem(THRESHOLDS_KEY, JSON.stringify(defaultThresholds));
+    setInstructorTempOverrideTracker({});
+    localStorage.setItem(INSTRUCTOR_TEMP_OVERRIDE_KEY, JSON.stringify({}));
     setHasChanges(false);
     toast.info('Reset to Defaults', {
       description: 'All threshold configurations have been reset to default values.',
@@ -135,9 +177,9 @@ export function ThresholdConfig() {
           <AlertTriangle className="h-4 w-4 text-red-600" />
           <AlertDescription className="text-red-800">
             {isInstructor
-              ? (canEditThresholds
-                ? 'Instructor mode: you can update thresholds only for your assigned labs. Each lab can be updated once every 24 hours.'
-                : `Instructor cooldown active for this lab. You can update again in about ${cooldownHoursLeft} hour(s).`)
+              ? (hasActiveTemporaryOverride
+                ? `Instructor mode: this lab is using temporary thresholds and will reset in about ${hoursUntilReset} hour(s).`
+                : 'Instructor mode: changes are temporary and automatically reset at the end of the day.')
               : 'Only Lab Administrators can modify threshold configurations. Contact your admin for changes.'}
           </AlertDescription>
         </Alert>

@@ -16,22 +16,8 @@ const isEnabled =
 const brokerUrl = import.meta.env.VITE_MQTT_BROKER_URL?.toString() ?? '';
 
 const subscribeTopics = [
-  'esp32SLG4/presence',
-  'esp32SLG4/mode',
-  'esp32SLG4/temperate',
-  'esp32SLG4/temperature',
-  'esp32SLG4/humidity',
-  'esp32SLG4/light',
-  'esp32SLG4/air',
-  'esp32SLG4/co2',
-  'esp32SLG4/counter',
-  'esp32SLG4/occupancy',
-  'esp32SLG4/alertst',
-  'esp32SLG4/alertsh',
-  'esp32SLG4/alertsl',
-  'esp32SLG4/alertsa',
-  'esp32SLG4/commands',
-  'esp32SLG4/status/+',
+  // Wildcard keeps integration flexible for new sensors/topics under this namespace.
+  'esp32SLG4/#',
 ] as const;
 
 interface MqttClientOptions {

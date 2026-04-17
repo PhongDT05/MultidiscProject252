@@ -37,7 +37,7 @@ export function MainDashboard() {
   const optimalRooms = accessibleLabs.filter((r) => r.status === "optimal").length;
   const warningRooms = accessibleLabs.filter((r) => r.status === "warning").length;
   const criticalRooms = accessibleLabs.filter((r) => r.status === "critical").length;
-  const occupiedLabs = accessibleLabs.filter((r) => r.presenceDetected || r.occupancy > 0).length;
+  const occupiedLabs = accessibleLabs.filter((r) => r.presenceDetected).length;
   const avgTemperature = accessibleLabs.length > 0 ? (
     accessibleLabs.reduce((sum, r) => sum + r.temperature, 0) / accessibleLabs.length
   ).toFixed(1) : '0.0';
@@ -344,17 +344,17 @@ export function MainDashboard() {
               <div className="mt-2 text-sm text-slate-500">Optimal: &lt;500 ppm</div>
             </div>
 
-            {/* Occupancy */}
+            {/* Presence */}
             <div className="bg-white rounded-lg shadow-sm p-6 border border-slate-200">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-slate-600">Occupied Labs</span>
+                <span className="text-sm text-slate-600">Presence Detected</span>
                 <Users className="w-5 h-5 text-purple-500" />
               </div>
               <div className="text-3xl font-semibold text-slate-900">
                 {occupiedLabs}/{totalRooms}
               </div>
               <div className="mt-2 text-sm text-slate-500">
-                {totalRooms > 0 ? Math.round((occupiedLabs / totalRooms) * 100) : 0}% occupied
+                {totalRooms > 0 ? Math.round((occupiedLabs / totalRooms) * 100) : 0}% labs with presence
               </div>
             </div>
           </div>
@@ -412,7 +412,7 @@ export function MainDashboard() {
                   </div>
                   <div className="text-sm text-slate-600">
                     <Users className="w-4 h-4 inline mr-1" />
-                    {room.presenceDetected || room.occupancy > 0 ? 'Occupied' : 'Empty'}
+                    {room.presenceDetected ? 'Presence' : 'No Presence'}
                   </div>
                 </div>
 

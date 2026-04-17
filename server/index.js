@@ -260,7 +260,7 @@ app.post('/api/users/:id/reset-password', async (req, res) => {
 
 app.get('/api/labs', async (_req, res) => {
   const labRows = await query(
-    `SELECT LabId, LabCode, LabName, [Status], Temperature, Humidity, Co2Level, LightLevel, Occupancy, MaxOccupancy, PresenceDetected
+    `SELECT LabId, LabCode, LabName, [Status], Temperature, Humidity, Co2Level, LightLevel, PresenceDetected
      FROM smartlab.Lab WHERE DeletedAt IS NULL ORDER BY LabCode`,
   );
 
@@ -377,21 +377,19 @@ app.put('/api/labs', async (req, res) => {
       upsertLabReq.input('humidity', sql.Decimal(5, 2), Number(lab.humidity));
       upsertLabReq.input('co2Level', sql.Decimal(8, 2), Number(lab.co2Level));
       upsertLabReq.input('lightLevel', sql.Decimal(8, 2), Number(lab.lightLevel));
-      upsertLabReq.input('occupancy', sql.Int, Number(lab.occupancy));
-      upsertLabReq.input('maxOccupancy', sql.Int, Number(lab.maxOccupancy));
-      upsertLabReq.input('presenceDetected', sql.Bit, lab.presenceDetected ? 1 : 0);
+      const presenceDetected = Boolean(lab.presenceDetected);
+      upsertLabReq.input('presenceDetected', sql.Bit, presenceDetected ? 1 : 0);
 
       await upsertLabReq.query(
         `MERGE smartlab.Lab AS t
          USING (SELECT @labCode AS LabCode) AS s ON s.LabCode = t.LabCode
          WHEN MATCHED THEN
            UPDATE SET LabName = @labName, [Status] = @status, Temperature = @temperature, Humidity = @humidity,
-                      Co2Level = @co2Level, LightLevel = @lightLevel, Occupancy = @occupancy,
-                      MaxOccupancy = @maxOccupancy, PresenceDetected = @presenceDetected,
+                      Co2Level = @co2Level, LightLevel = @lightLevel, PresenceDetected = @presenceDetected,
                       UpdatedAt = SYSUTCDATETIME(), DeletedAt = NULL
          WHEN NOT MATCHED THEN
-           INSERT (LabCode, LabName, [Status], Temperature, Humidity, Co2Level, LightLevel, Occupancy, MaxOccupancy, PresenceDetected)
-           VALUES (@labCode, @labName, @status, @temperature, @humidity, @co2Level, @lightLevel, @occupancy, @maxOccupancy, @presenceDetected);`,
+           INSERT (LabCode, LabName, [Status], Temperature, Humidity, Co2Level, LightLevel, PresenceDetected)
+           VALUES (@labCode, @labName, @status, @temperature, @humidity, @co2Level, @lightLevel, @presenceDetected);`,
       );
 
       const clearReq = requestFactory();
@@ -503,12 +501,12 @@ app.post('/api/telemetry/snapshots', async (req, res) => {
       request.input('humidity', sql.Decimal(5, 2), Number(snapshot.humidity));
       request.input('co2Level', sql.Decimal(8, 2), Number(snapshot.co2Level));
       request.input('lightLevel', sql.Decimal(8, 2), Number(snapshot.lightLevel));
-      request.input('occupancy', sql.Int, Number(snapshot.occupancy));
-      request.input('presenceDetected', sql.Bit, snapshot.presenceDetected ? 1 : 0);
+      const presenceDetected = Boolean(snapshot.presenceDetected);
+      request.input('presenceDetected', sql.Bit, presenceDetected ? 1 : 0);
 
       await request.query(
-        `INSERT INTO smartlab.TelemetryReading (LabId, RecordedAt, Temperature, Humidity, Co2Level, LightLevel, Occupancy, PresenceDetected)
-         SELECT l.LabId, @recordedAt, @temperature, @humidity, @co2Level, @lightLevel, @occupancy, @presenceDetected
+        `INSERT INTO smartlab.TelemetryReading (LabId, RecordedAt, Temperature, Humidity, Co2Level, LightLevel, PresenceDetected)
+        SELECT l.LabId, @recordedAt, @temperature, @humidity, @co2Level, @lightLevel, @presenceDetected
          FROM smartlab.Lab l
          WHERE l.LabCode = @labCode`,
       );
@@ -527,7 +525,7 @@ app.get('/api/telemetry/history', async (req, res) => {
   }
 
   const rows = await query(
-    `SELECT tr.RecordedAt, tr.Temperature, tr.Humidity, tr.Co2Level, tr.LightLevel, tr.Occupancy, tr.PresenceDetected
+    `SELECT tr.RecordedAt, tr.Temperature, tr.Humidity, tr.Co2Level, tr.LightLevel, tr.PresenceDetected
      FROM smartlab.TelemetryReading tr
      INNER JOIN smartlab.Lab l ON l.LabId = tr.LabId
      WHERE l.LabCode = @labCode
@@ -538,13 +536,12 @@ app.get('/api/telemetry/history', async (req, res) => {
 
   res.json(
     rows.map((row) => ({
+      presenceDetected: Boolean(row.PresenceDetected),
       recordedAt: new Date(row.RecordedAt).toISOString(),
       temperature: Number(row.Temperature ?? 0),
       humidity: Number(row.Humidity ?? 0),
       co2Level: Number(row.Co2Level ?? 0),
       lightLevel: Number(row.LightLevel ?? 0),
-      occupancy: Number(row.Occupancy ?? 0),
-      presenceDetected: Boolean(row.PresenceDetected),
     })),
   );
 });

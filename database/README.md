@@ -44,8 +44,7 @@ Complete SQL Server Docker + DBeaver integration kit for the Smart Lab Dashboard
 │    │  ├─ smartlab.IoTDevice         │
 │    │  ├─ smartlab.TelemetryReading  │
 │    │  ├─ smartlab.Alert             │
-│    │  ├─ smartlab.AuditEvent        │
-│    │  └─ ... (12 tables total)      │
+│    │  └─ ... (core operational tables) │
 │    └─ sqlserver-data (volume)       │
 └─────────────────────────────────────┘
          │
@@ -141,4 +140,3 @@ For full troubleshooting, see [DOCKER_DBEAVER_SETUP.md](DOCKER_DBEAVER_SETUP.md)
 
 - **Questions?** Check [DOCKER_DBEAVER_SETUP.md](DOCKER_DBEAVER_SETUP.md).
 - **Schema changes?** Edit [sqlserver/001_schema.sql](sqlserver/001_schema.sql), then reset: `make -C database db-reset`.
-- **Want to add stored procedures?** Create `003_views_and_procs.sql` in `database/sqlserver/` and update setup scripts.

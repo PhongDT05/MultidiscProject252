@@ -7,7 +7,6 @@ export interface TelemetrySnapshot {
   humidity: number;
   co2Level: number;
   lightLevel: number;
-  occupancy: number;
   presenceDetected: boolean;
 }
 

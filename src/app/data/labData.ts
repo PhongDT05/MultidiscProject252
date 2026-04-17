@@ -6,8 +6,6 @@ export interface LabRoom {
   humidity: number;
   co2Level: number;
   lightLevel: number; // Lux
-  occupancy: number;
-  maxOccupancy: number;
   presenceDetected: boolean; // For UC4 - Energy Saving
   equipment: Equipment[];
   alerts: Alert[];
@@ -99,7 +97,6 @@ export interface HistoricalData {
   humidity: number;
   co2Level: number;
   lightLevel?: number;
-  occupancy?: number;
 }
 
 // UC3 - Automated Action Log
@@ -169,8 +166,6 @@ export const labRooms: LabRoom[] = [
     humidity: 0,
     co2Level: 0,
     lightLevel: 0,
-    occupancy: 0,
-    maxOccupancy: 20,
     presenceDetected: false,
     equipment: [],
     alerts: [],
@@ -185,8 +180,6 @@ export const labRooms: LabRoom[] = [
     humidity: 62,
     co2Level: 580,
     lightLevel: 720,
-    occupancy: 1,
-    maxOccupancy: 20,
     presenceDetected: true,
     equipment: [
       { id: "eq-05", name: "Incubator 1", status: "online", lastMaintenance: "2026-02-01", mode: "auto", isEssential: true, cumulativeRuntimeHours: 0, lastRuntimeUpdateAt: new Date().toISOString() },
@@ -223,7 +216,7 @@ export const labRooms: LabRoom[] = [
     iotDevices: [
       { id: "iot-06", name: "Temp/Humidity Combo", type: "sensor", status: "online", lastSeen: new Date().toISOString(), signalStrength: 87, firmwareVersion: "2.0.1", dataRate: 6, location: "Ceiling" },
       { id: "iot-07", name: "CO2 Monitor", type: "sensor", status: "online", lastSeen: new Date().toISOString(), signalStrength: 91, firmwareVersion: "1.9.2", dataRate: 2, location: "Wall" },
-      { id: "iot-08", name: "Occupancy Sensor", type: "sensor", status: "warning", lastSeen: new Date(Date.now() - 180000).toISOString(), signalStrength: 65, batteryLevel: 25, firmwareVersion: "1.4.8", dataRate: 1, location: "Ceiling" },
+      { id: "iot-08", name: "Presence Sensor", type: "sensor", status: "warning", lastSeen: new Date(Date.now() - 180000).toISOString(), signalStrength: 65, batteryLevel: 25, firmwareVersion: "1.4.8", dataRate: 1, location: "Ceiling" },
       { id: "iot-09", name: "Light Sensor", type: "sensor", status: "online", lastSeen: new Date().toISOString(), signalStrength: 93, firmwareVersion: "1.7.0", dataRate: 4, location: "Window" },
     ],
     actuators: [
@@ -240,8 +233,6 @@ export const labRooms: LabRoom[] = [
     humidity: 40,
     co2Level: 400,
     lightLevel: 880,
-    occupancy: 1,
-    maxOccupancy: 15,
     presenceDetected: true,
     equipment: [
       { id: "eq-09", name: "Oscilloscope 1", status: "online", lastMaintenance: "2026-02-20", mode: "manual", isEssential: false, cumulativeRuntimeHours: 0, lastRuntimeUpdateAt: new Date().toISOString() },
@@ -267,8 +258,6 @@ export const labRooms: LabRoom[] = [
     humidity: 38,
     co2Level: 720,
     lightLevel: 600,
-    occupancy: 1,
-    maxOccupancy: 20,
     presenceDetected: true,
     equipment: [
       { id: "eq-12", name: "Server Rack 1", status: "online", lastMaintenance: "2026-02-10", mode: "auto", isEssential: true, cumulativeRuntimeHours: 0, lastRuntimeUpdateAt: new Date().toISOString() },
@@ -319,8 +308,6 @@ export const labRooms: LabRoom[] = [
     humidity: 48,
     co2Level: 450,
     lightLevel: 550,
-    occupancy: 1,
-    maxOccupancy: 10,
     presenceDetected: true,
     equipment: [
       { id: "eq-15", name: "Spectrometer", status: "online", lastMaintenance: "2026-02-22", mode: "manual", isEssential: true, cumulativeRuntimeHours: 0, lastRuntimeUpdateAt: new Date().toISOString() },
@@ -345,8 +332,6 @@ export const labRooms: LabRoom[] = [
     humidity: 55,
     co2Level: 520,
     lightLevel: 920,
-    occupancy: 1,
-    maxOccupancy: 18,
     presenceDetected: true,
     equipment: [
       { id: "eq-17", name: "3D Printer 1", status: "online", lastMaintenance: "2026-02-12", mode: "manual", isEssential: false, cumulativeRuntimeHours: 0, lastRuntimeUpdateAt: new Date().toISOString() },
@@ -371,7 +356,7 @@ export const labRooms: LabRoom[] = [
       { id: "iot-20", name: "Combo Sensor 1", type: "sensor", status: "online", lastSeen: new Date().toISOString(), signalStrength: 90, firmwareVersion: "2.0.1", dataRate: 6, location: "Zone A" },
       { id: "iot-21", name: "Combo Sensor 2", type: "sensor", status: "online", lastSeen: new Date().toISOString(), signalStrength: 88, firmwareVersion: "2.0.1", dataRate: 6, location: "Zone B" },
       { id: "iot-22", name: "Air Quality Monitor", type: "sensor", status: "online", lastSeen: new Date().toISOString(), signalStrength: 85, firmwareVersion: "1.9.5", dataRate: 2, location: "Center" },
-      { id: "iot-23", name: "Occupancy Counter", type: "sensor", status: "online", lastSeen: new Date().toISOString(), signalStrength: 92, batteryLevel: 68, firmwareVersion: "1.6.2", dataRate: 1, location: "Doorway" },
+      { id: "iot-23", name: "Presence Sensor", type: "sensor", status: "online", lastSeen: new Date().toISOString(), signalStrength: 92, batteryLevel: 68, firmwareVersion: "1.6.2", dataRate: 1, location: "Doorway" },
     ],
     actuators: [
       { id: "act-14", name: "Main HVAC", type: "hvac", status: "auto", mode: "auto", lastActivated: new Date(Date.now() - 2700000).toISOString() },
@@ -404,7 +389,6 @@ export const generateHistoricalData = (roomId: string): HistoricalData[] => {
       humidity: Math.round(baseHumidity + (Math.random() - 0.5) * 10),
       co2Level: Math.round(baseCO2 + (Math.random() - 0.5) * 100),
       lightLevel: Math.round(baseLightLevel + (Math.random() - 0.5) * 150),
-      occupancy: Math.round(room.occupancy + (Math.random() - 0.5) * 5),
     });
   }
 

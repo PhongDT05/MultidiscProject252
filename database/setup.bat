@@ -2,7 +2,19 @@
 REM Smart Lab Database Setup Script for Windows
 REM Prerequisites: Docker Desktop running
 
-setlocal enabledelayedexpansion
+setlocal DisableDelayedExpansion
+
+set "SCRIPT_DIR=%~dp0"
+for %%I in ("%SCRIPT_DIR%..") do set "ROOT_DIR=%%~fI"
+set "COMPOSE_FILE=%ROOT_DIR%\docker-compose.yml"
+set "SCHEMA_FILE=%SCRIPT_DIR%sqlserver\001_schema.sql"
+set "SEED_FILE=%SCRIPT_DIR%sqlserver\002_seed_demo.sql"
+
+if not exist "%COMPOSE_FILE%" (
+  echo ERROR: docker-compose.yml not found at "%COMPOSE_FILE%"
+  pause
+  exit /b 1
+)
 
 :menu
 cls
@@ -39,20 +51,20 @@ goto menu
 :start
 echo.
 echo Starting SQL Server container...
-docker compose up -d sqlserver
+docker compose -f "%COMPOSE_FILE%" up -d sqlserver
 echo.
 echo Waiting for container to be ready (30 seconds)...
 timeout /t 30 /nobreak
 echo.
 echo Container started! Check status:
-docker compose ps
+docker compose -f "%COMPOSE_FILE%" ps
 pause
 goto menu
 
 :stop
 echo.
 echo Stopping SQL Server container...
-docker compose down
+docker compose -f "%COMPOSE_FILE%" down
 echo.
 pause
 goto menu
@@ -60,28 +72,38 @@ goto menu
 :logs
 echo.
 echo Showing container logs (press Ctrl+C to exit)...
-docker compose logs -f sqlserver
+docker compose -f "%COMPOSE_FILE%" logs -f sqlserver
 pause
 goto menu
 
 :create_db
 echo.
-echo Creating SmartLabDb database...
+echo Recreating SmartLabDb database...
 docker exec smartlab-sqlserver /opt/mssql-tools18/bin/sqlcmd ^
   -C ^
   -S localhost ^
   -U sa ^
   -P "SmartLab@2026!" ^
-  -Q "CREATE DATABASE SmartLabDb;"
+  -Q "IF DB_ID('SmartLabDb') IS NOT NULL BEGIN ALTER DATABASE SmartLabDb SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE SmartLabDb; END; CREATE DATABASE SmartLabDb;"
+if errorlevel 1 (
+  echo ERROR: Failed to recreate SmartLabDb.
+  pause
+  goto menu
+)
 echo.
-echo Database created!
+echo Database recreated!
 pause
 goto menu
 
 :load_schema
 echo.
 echo Loading schema (001_schema.sql)...
-docker cp database\sqlserver\001_schema.sql smartlab-sqlserver:/schema.sql
+docker cp "%SCHEMA_FILE%" smartlab-sqlserver:/schema.sql
+if errorlevel 1 (
+  echo ERROR: Failed to copy schema file: "%SCHEMA_FILE%"
+  pause
+  goto menu
+)
 docker exec smartlab-sqlserver /opt/mssql-tools18/bin/sqlcmd ^
   -C ^
   -S localhost ^
@@ -89,6 +111,11 @@ docker exec smartlab-sqlserver /opt/mssql-tools18/bin/sqlcmd ^
   -P "SmartLab@2026!" ^
   -d SmartLabDb ^
   -i /schema.sql
+if errorlevel 1 (
+  echo ERROR: Failed to load schema.
+  pause
+  goto menu
+)
 echo.
 echo Schema loaded!
 pause
@@ -97,7 +124,12 @@ goto menu
 :load_seed
 echo.
 echo Loading seed data (002_seed_demo.sql)...
-docker cp database\sqlserver\002_seed_demo.sql smartlab-sqlserver:/seed.sql
+docker cp "%SEED_FILE%" smartlab-sqlserver:/seed.sql
+if errorlevel 1 (
+  echo ERROR: Failed to copy seed file: "%SEED_FILE%"
+  pause
+  goto menu
+)
 docker exec smartlab-sqlserver /opt/mssql-tools18/bin/sqlcmd ^
   -C ^
   -S localhost ^
@@ -105,6 +137,11 @@ docker exec smartlab-sqlserver /opt/mssql-tools18/bin/sqlcmd ^
   -P "SmartLab@2026!" ^
   -d SmartLabDb ^
   -i /seed.sql
+if errorlevel 1 (
+  echo ERROR: Failed to load seed data.
+  pause
+  goto menu
+)
 echo.
 echo Seed data loaded!
 pause
@@ -119,10 +156,10 @@ if /i "%confirm%"!="Y" goto menu
 
 echo.
 echo Stopping containers...
-docker compose down -v
+docker compose -f "%COMPOSE_FILE%" down -v --remove-orphans
 echo.
 echo Starting containers...
-docker compose up -d sqlserver
+docker compose -f "%COMPOSE_FILE%" up -d sqlserver
 echo.
 echo Waiting for container ready...
 timeout /t 30 /nobreak
@@ -133,10 +170,20 @@ docker exec smartlab-sqlserver /opt/mssql-tools18/bin/sqlcmd ^
   -S localhost ^
   -U sa ^
   -P "SmartLab@2026!" ^
-  -Q "CREATE DATABASE SmartLabDb;"
+  -Q "IF DB_ID('SmartLabDb') IS NOT NULL BEGIN ALTER DATABASE SmartLabDb SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE SmartLabDb; END; CREATE DATABASE SmartLabDb;"
+if errorlevel 1 (
+  echo ERROR: Failed to recreate SmartLabDb.
+  pause
+  goto menu
+)
 echo.
 echo Loading schema...
-docker cp database\sqlserver\001_schema.sql smartlab-sqlserver:/schema.sql
+docker cp "%SCHEMA_FILE%" smartlab-sqlserver:/schema.sql
+if errorlevel 1 (
+  echo ERROR: Failed to copy schema file: "%SCHEMA_FILE%"
+  pause
+  goto menu
+)
 docker exec smartlab-sqlserver /opt/mssql-tools18/bin/sqlcmd ^
   -C ^
   -S localhost ^
@@ -144,9 +191,19 @@ docker exec smartlab-sqlserver /opt/mssql-tools18/bin/sqlcmd ^
   -P "SmartLab@2026!" ^
   -d SmartLabDb ^
   -i /schema.sql
+if errorlevel 1 (
+  echo ERROR: Failed to load schema.
+  pause
+  goto menu
+)
 echo.
 echo Loading seed data...
-docker cp database\sqlserver\002_seed_demo.sql smartlab-sqlserver:/seed.sql
+docker cp "%SEED_FILE%" smartlab-sqlserver:/seed.sql
+if errorlevel 1 (
+  echo ERROR: Failed to copy seed file: "%SEED_FILE%"
+  pause
+  goto menu
+)
 docker exec smartlab-sqlserver /opt/mssql-tools18/bin/sqlcmd ^
   -C ^
   -S localhost ^
@@ -154,6 +211,11 @@ docker exec smartlab-sqlserver /opt/mssql-tools18/bin/sqlcmd ^
   -P "SmartLab@2026!" ^
   -d SmartLabDb ^
   -i /seed.sql
+if errorlevel 1 (
+  echo ERROR: Failed to load seed data.
+  pause
+  goto menu
+)
 echo.
 echo Full reset complete!
 pause

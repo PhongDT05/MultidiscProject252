@@ -3,7 +3,8 @@ SET QUOTED_IDENTIFIER ON;
 GO
 
 -- Smart Lab Dashboard - SQL Server Relational Schema v1
--- Apply order: 001_schema.sql -> 002_seed_demo.sql
+-- Apply order (fresh setup): 001_schema.sql -> 002_seed_demo.sql
+-- This file is the consolidated latest schema for reset-based setup.
 
 IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = 'smartlab')
 BEGIN
@@ -33,8 +34,6 @@ CREATE TABLE smartlab.[User] (
     UpdatedAt DATETIME2(3) NOT NULL CONSTRAINT DF_User_UpdatedAt DEFAULT (SYSUTCDATETIME()),
     DeletedAt DATETIME2(3) NULL,
     CONSTRAINT PK_User PRIMARY KEY (UserId),
-    CONSTRAINT UQ_User_Username UNIQUE (Username),
-    CONSTRAINT UQ_User_Email UNIQUE (Email),
     CONSTRAINT FK_User_Role FOREIGN KEY (RoleId) REFERENCES smartlab.[Role](RoleId),
     CONSTRAINT CK_User_AccountStatus CHECK (AccountStatus IN ('active', 'inactive'))
 );
@@ -49,18 +48,12 @@ CREATE TABLE smartlab.Lab (
     Humidity DECIMAL(5,2) NULL,
     Co2Level DECIMAL(8,2) NULL,
     LightLevel DECIMAL(8,2) NULL,
-    Occupancy INT NOT NULL CONSTRAINT DF_Lab_Occupancy DEFAULT (0),
-    MaxOccupancy INT NOT NULL,
     PresenceDetected BIT NOT NULL CONSTRAINT DF_Lab_PresenceDetected DEFAULT (0),
     CreatedAt DATETIME2(3) NOT NULL CONSTRAINT DF_Lab_CreatedAt DEFAULT (SYSUTCDATETIME()),
     UpdatedAt DATETIME2(3) NOT NULL CONSTRAINT DF_Lab_UpdatedAt DEFAULT (SYSUTCDATETIME()),
     DeletedAt DATETIME2(3) NULL,
     CONSTRAINT PK_Lab PRIMARY KEY (LabId),
-    CONSTRAINT UQ_Lab_LabCode UNIQUE (LabCode),
-    CONSTRAINT CK_Lab_Status CHECK ([Status] IN ('optimal', 'warning', 'critical')),
-    CONSTRAINT CK_Lab_Occupancy CHECK (Occupancy >= 0),
-    CONSTRAINT CK_Lab_MaxOccupancy CHECK (MaxOccupancy > 0),
-    CONSTRAINT CK_Lab_OccupancyBound CHECK (Occupancy <= MaxOccupancy)
+    CONSTRAINT CK_Lab_Status CHECK ([Status] IN ('optimal', 'warning', 'critical'))
 );
 GO
 
@@ -89,7 +82,6 @@ CREATE TABLE smartlab.Equipment (
     UpdatedAt DATETIME2(3) NOT NULL CONSTRAINT DF_Equipment_UpdatedAt DEFAULT (SYSUTCDATETIME()),
     DeletedAt DATETIME2(3) NULL,
     CONSTRAINT PK_Equipment PRIMARY KEY (EquipmentId),
-    CONSTRAINT UQ_Equipment_EquipmentCode UNIQUE (EquipmentCode),
     CONSTRAINT FK_Equipment_Lab FOREIGN KEY (LabId) REFERENCES smartlab.Lab(LabId),
     CONSTRAINT CK_Equipment_Status CHECK ([Status] IN ('online', 'offline', 'maintenance')),
     CONSTRAINT CK_Equipment_Mode CHECK ([Mode] IN ('auto', 'manual')),
@@ -116,7 +108,6 @@ CREATE TABLE smartlab.IoTDevice (
     UpdatedAt DATETIME2(3) NOT NULL CONSTRAINT DF_IoTDevice_UpdatedAt DEFAULT (SYSUTCDATETIME()),
     DeletedAt DATETIME2(3) NULL,
     CONSTRAINT PK_IoTDevice PRIMARY KEY (IoTDeviceId),
-    CONSTRAINT UQ_IoTDevice_DeviceCode UNIQUE (DeviceCode),
     CONSTRAINT FK_IoTDevice_Lab FOREIGN KEY (LabId) REFERENCES smartlab.Lab(LabId),
     CONSTRAINT CK_IoTDevice_DeviceType CHECK (DeviceType IN ('sensor', 'gateway', 'actuator')),
     CONSTRAINT CK_IoTDevice_Status CHECK ([Status] IN ('online', 'offline', 'error', 'warning')),
@@ -140,7 +131,6 @@ CREATE TABLE smartlab.Actuator (
     UpdatedAt DATETIME2(3) NOT NULL CONSTRAINT DF_Actuator_UpdatedAt DEFAULT (SYSUTCDATETIME()),
     DeletedAt DATETIME2(3) NULL,
     CONSTRAINT PK_Actuator PRIMARY KEY (ActuatorId),
-    CONSTRAINT UQ_Actuator_ActuatorCode UNIQUE (ActuatorCode),
     CONSTRAINT FK_Actuator_Lab FOREIGN KEY (LabId) REFERENCES smartlab.Lab(LabId),
     CONSTRAINT CK_Actuator_Type CHECK (ActuatorType IN ('hvac', 'exhaust_fan', 'lighting', 'ventilation')),
     CONSTRAINT CK_Actuator_Status CHECK ([Status] IN ('on', 'off', 'auto')),
@@ -192,7 +182,6 @@ CREATE TABLE smartlab.Alert (
     CreatedAt DATETIME2(3) NOT NULL CONSTRAINT DF_Alert_CreatedAt DEFAULT (SYSUTCDATETIME()),
     DeletedAt DATETIME2(3) NULL,
     CONSTRAINT PK_Alert PRIMARY KEY (AlertId),
-    CONSTRAINT UQ_Alert_AlertCode UNIQUE (AlertCode),
     CONSTRAINT FK_Alert_Lab FOREIGN KEY (LabId) REFERENCES smartlab.Lab(LabId),
     CONSTRAINT FK_Alert_AcknowledgedByUser FOREIGN KEY (AcknowledgedByUserId) REFERENCES smartlab.[User](UserId),
     CONSTRAINT CK_Alert_Type CHECK (AlertType IN ('info', 'warning', 'critical', 'danger')),
@@ -221,6 +210,22 @@ CREATE TABLE smartlab.AutomatedAction (
 );
 GO
 
+CREATE TABLE smartlab.DataChangeLog (
+    DataChangeLogId BIGINT IDENTITY(1,1) NOT NULL,
+    LabId BIGINT NOT NULL,
+    ChangedByUserId BIGINT NULL,
+    ChangeType VARCHAR(30) NOT NULL,
+    FieldName NVARCHAR(100) NOT NULL,
+    OldValue NVARCHAR(MAX) NULL,
+    NewValue NVARCHAR(MAX) NULL,
+    Description NVARCHAR(500) NULL,
+    ChangedAt DATETIME2(3) NOT NULL CONSTRAINT DF_DataChangeLog_ChangedAt DEFAULT (SYSUTCDATETIME()),
+    CONSTRAINT PK_DataChangeLog PRIMARY KEY (DataChangeLogId),
+    CONSTRAINT FK_DataChangeLog_Lab FOREIGN KEY (LabId) REFERENCES smartlab.Lab(LabId),
+    CONSTRAINT FK_DataChangeLog_ChangedByUser FOREIGN KEY (ChangedByUserId) REFERENCES smartlab.[User](UserId)
+);
+GO
+
 CREATE TABLE smartlab.TelemetryReading (
     TelemetryReadingId BIGINT IDENTITY(1,1) NOT NULL,
     LabId BIGINT NOT NULL,
@@ -229,52 +234,9 @@ CREATE TABLE smartlab.TelemetryReading (
     Humidity DECIMAL(5,2) NULL,
     Co2Level DECIMAL(8,2) NULL,
     LightLevel DECIMAL(8,2) NULL,
-    Occupancy INT NULL,
     PresenceDetected BIT NULL,
     CONSTRAINT PK_TelemetryReading PRIMARY KEY (TelemetryReadingId),
-    CONSTRAINT FK_TelemetryReading_Lab FOREIGN KEY (LabId) REFERENCES smartlab.Lab(LabId),
-    CONSTRAINT CK_TelemetryReading_Occupancy CHECK (Occupancy IS NULL OR Occupancy >= 0)
-);
-GO
-
-CREATE TABLE smartlab.AuditEvent (
-    AuditEventId BIGINT IDENTITY(1,1) NOT NULL,
-    Category VARCHAR(50) NOT NULL,
-    [Action] VARCHAR(100) NOT NULL,
-    InterfaceName VARCHAR(100) NOT NULL,
-    ActorId VARCHAR(100) NOT NULL,
-    ActorName NVARCHAR(100) NOT NULL,
-    ActorRole VARCHAR(50) NOT NULL,
-    TargetType VARCHAR(50) NULL,
-    TargetId VARCHAR(100) NULL,
-    RoomCode VARCHAR(30) NULL,
-    ReasonCode VARCHAR(50) NULL,
-    [Result] VARCHAR(20) NOT NULL,
-    CorrelationId VARCHAR(100) NULL,
-    MetadataJson NVARCHAR(MAX) NULL,
-    OccurredAt DATETIME2(3) NOT NULL CONSTRAINT DF_AuditEvent_OccurredAt DEFAULT (SYSUTCDATETIME()),
-    CONSTRAINT PK_AuditEvent PRIMARY KEY (AuditEventId),
-    CONSTRAINT CK_AuditEvent_Category CHECK (Category IN ('user_action', 'system_event', 'sensor_data')),
-    CONSTRAINT CK_AuditEvent_Result CHECK ([Result] IN ('success', 'failed', 'attempted'))
-);
-GO
-
-CREATE TABLE smartlab.DataChangeLog (
-    DataChangeLogId BIGINT IDENTITY(1,1) NOT NULL,
-    ChangeCode VARCHAR(50) NOT NULL,
-    ChangedAt DATETIME2(3) NOT NULL CONSTRAINT DF_DataChangeLog_ChangedAt DEFAULT (SYSUTCDATETIME()),
-    LabId BIGINT NULL,
-    RoomName NVARCHAR(120) NULL,
-    ChangeType VARCHAR(20) NOT NULL,
-    FieldName VARCHAR(100) NOT NULL,
-    OldValue NVARCHAR(255) NULL,
-    NewValue NVARCHAR(255) NULL,
-    ChangedBy NVARCHAR(100) NULL,
-    [Description] NVARCHAR(500) NOT NULL,
-    CONSTRAINT PK_DataChangeLog PRIMARY KEY (DataChangeLogId),
-    CONSTRAINT UQ_DataChangeLog_ChangeCode UNIQUE (ChangeCode),
-    CONSTRAINT FK_DataChangeLog_Lab FOREIGN KEY (LabId) REFERENCES smartlab.Lab(LabId),
-    CONSTRAINT CK_DataChangeLog_ChangeType CHECK (ChangeType IN ('temperature', 'humidity', 'co2', 'occupancy', 'equipment', 'alert', 'status', 'system'))
+    CONSTRAINT FK_TelemetryReading_Lab FOREIGN KEY (LabId) REFERENCES smartlab.Lab(LabId)
 );
 GO
 
@@ -309,16 +271,20 @@ CREATE TABLE smartlab.SystemSetting (
 GO
 
 CREATE INDEX IX_User_RoleId ON smartlab.[User] (RoleId);
+CREATE UNIQUE INDEX UX_User_Username_Active ON smartlab.[User] (Username) WHERE DeletedAt IS NULL;
+CREATE UNIQUE INDEX UX_User_Email_Active ON smartlab.[User] (Email) WHERE DeletedAt IS NULL;
 CREATE INDEX IX_UserLabAssignment_LabId_UserId ON smartlab.UserLabAssignment (LabId, UserId);
+CREATE UNIQUE INDEX UX_Lab_LabCode_Active ON smartlab.Lab (LabCode) WHERE DeletedAt IS NULL;
 CREATE INDEX IX_Equipment_LabId_Status ON smartlab.Equipment (LabId, [Status]);
+CREATE UNIQUE INDEX UX_Equipment_EquipmentCode_Active ON smartlab.Equipment (EquipmentCode) WHERE DeletedAt IS NULL;
 CREATE INDEX IX_IoTDevice_LabId_Status ON smartlab.IoTDevice (LabId, [Status]);
+CREATE UNIQUE INDEX UX_IoTDevice_DeviceCode_Active ON smartlab.IoTDevice (DeviceCode) WHERE DeletedAt IS NULL;
 CREATE INDEX IX_Actuator_LabId_Status ON smartlab.Actuator (LabId, [Status]);
+CREATE UNIQUE INDEX UX_Actuator_ActuatorCode_Active ON smartlab.Actuator (ActuatorCode) WHERE DeletedAt IS NULL;
 CREATE INDEX IX_Alert_LabId_Acknowledged_Timestamp ON smartlab.Alert (LabId, IsAcknowledged, [Timestamp] DESC);
+CREATE UNIQUE INDEX UX_Alert_AlertCode_Active ON smartlab.Alert (AlertCode) WHERE DeletedAt IS NULL;
 CREATE INDEX IX_AutomatedAction_LabId_Timestamp ON smartlab.AutomatedAction (LabId, [Timestamp] DESC);
-CREATE INDEX IX_TelemetryReading_LabId_RecordedAt ON smartlab.TelemetryReading (LabId, RecordedAt DESC);
-CREATE INDEX IX_AuditEvent_OccurredAt ON smartlab.AuditEvent (OccurredAt DESC);
-CREATE INDEX IX_AuditEvent_Category_OccurredAt ON smartlab.AuditEvent (Category, OccurredAt DESC);
-CREATE INDEX IX_DataChangeLog_ChangedAt ON smartlab.DataChangeLog (ChangedAt DESC);
 CREATE INDEX IX_DataChangeLog_LabId_ChangedAt ON smartlab.DataChangeLog (LabId, ChangedAt DESC);
+CREATE INDEX IX_TelemetryReading_LabId_RecordedAt ON smartlab.TelemetryReading (LabId, RecordedAt DESC);
 CREATE INDEX IX_LabRecommendation_LabId_CreatedAt ON smartlab.LabRecommendation (LabId, CreatedAt DESC);
 GO

@@ -4,7 +4,7 @@ export type ChangeType =
   | 'temperature' 
   | 'humidity' 
   | 'co2' 
-  | 'occupancy' 
+  | 'presence'
   | 'equipment' 
   | 'alert' 
   | 'status'

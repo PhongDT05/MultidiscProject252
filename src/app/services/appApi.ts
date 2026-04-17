@@ -67,7 +67,6 @@ const applyLab01EmptyBaselineMigration = (labs: LabRoom[]): LabRoom[] => {
           humidity: 0,
           co2Level: 0,
           lightLevel: 0,
-          occupancy: 0,
           presenceDetected: false,
           alerts: [],
           equipment: [],

@@ -353,16 +353,105 @@ const telemetryTopicSensorMap: Record<string, string> = {
   'esp32SLG4/light': 'Light Sensor',
   'esp32SLG4/air': 'CO2 Sensor',
   'esp32SLG4/co2': 'CO2 Sensor',
-  'esp32SLG4/counter': 'Occupancy Counter',
-  'esp32SLG4/occupancy': 'Occupancy Counter',
+  'esp32SLG4/counter': 'Presence Sensor',
+  'esp32SLG4/occupancy': 'Presence Sensor',
   'esp32SLG4/presence': 'Presence Sensor',
+};
+
+const telemetryTopicCanonicalKeyMap: Record<string, string> = {
+  'esp32SLG4/temperate': 'temperature',
+  'esp32SLG4/temperature': 'temperature',
+  'esp32SLG4/humidity': 'humidity',
+  'esp32SLG4/light': 'light',
+  'esp32SLG4/air': 'co2',
+  'esp32SLG4/co2': 'co2',
+  'esp32SLG4/counter': 'presence',
+  'esp32SLG4/occupancy': 'presence',
+  'esp32SLG4/presence': 'presence',
+};
+
+const sanitizeTopicKey = (value: string): string =>
+  value.replace(/[^a-zA-Z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+
+const telemetryTopicToStableId = (topic: string): string => {
+  const canonical = telemetryTopicCanonicalKeyMap[topic];
+  if (canonical) {
+    return `iot-telemetry-${canonical}`;
+  }
+  return `iot-telemetry-${sanitizeTopicKey(topic)}`;
+};
+
+const genericIgnoredTopicKeys = new Set([
+  'mode',
+  'commands',
+  'alertst',
+  'alertsh',
+  'alertsl',
+  'alertsa',
+]);
+
+const toTitleCase = (value: string): string =>
+  value
+    .split(' ')
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(' ');
+
+const topicToSensorName = (topic: string): string => {
+  const topicKey = topic.split('/').pop() ?? 'sensor';
+  const normalized = topicKey.replace(/[._-]+/g, ' ').trim();
+  return `${toTitleCase(normalized || 'Sensor')} Sensor`;
+};
+
+const upsertSensorFromUnmappedTopic = (room: LabRoom, topic: string, receivedAt: string): LabRoom => {
+  if (!topic.startsWith('esp32SLG4/')) return room;
+  if (topic.startsWith('esp32SLG4/status/')) return room;
+  if (telemetryTopicSensorMap[topic]) return room;
+
+  const topicKey = topic.split('/').pop() ?? '';
+  if (!topicKey || genericIgnoredTopicKeys.has(topicKey)) return room;
+
+  const sensorName = topicToSensorName(topic);
+  const stableId = `iot-generic-${sanitizeTopicKey(topic)}`;
+  const existing = room.iotDevices.find((item) => item.id === stableId);
+
+  if (existing) {
+    return {
+      ...room,
+      iotDevices: room.iotDevices.map((item) =>
+        item.id === stableId
+          ? { ...item, status: 'online', lastSeen: receivedAt }
+          : item,
+      ),
+    };
+  }
+
+  return {
+    ...room,
+    iotDevices: [
+      ...room.iotDevices,
+      {
+        id: stableId,
+        name: sensorName,
+        type: 'sensor',
+        status: 'online',
+        lastSeen: receivedAt,
+        signalStrength: 100,
+        firmwareVersion: 'mqtt-live',
+        dataRate: 1,
+        location: 'MQTT source',
+      },
+    ],
+  };
 };
 
 const upsertSensorFromTelemetryTopic = (room: LabRoom, topic: string, receivedAt: string): LabRoom => {
   const sensorName = telemetryTopicSensorMap[topic];
   if (!sensorName) return room;
 
-  const existing = room.iotDevices.find((item) => item.name === sensorName);
+  const stableId = telemetryTopicToStableId(topic);
+
+  const existing = room.iotDevices.find((item) => item.id === stableId);
   if (existing) {
     if (existing.status === 'online' && existing.lastSeen === receivedAt) {
       return room;
@@ -371,7 +460,7 @@ const upsertSensorFromTelemetryTopic = (room: LabRoom, topic: string, receivedAt
     return {
       ...room,
       iotDevices: room.iotDevices.map((item) =>
-        item.name === sensorName
+        item.id === stableId
           ? { ...item, status: 'online', lastSeen: receivedAt }
           : item,
       ),
@@ -384,7 +473,7 @@ const upsertSensorFromTelemetryTopic = (room: LabRoom, topic: string, receivedAt
     iotDevices: [
       ...room.iotDevices,
       {
-        id: `iot-live-${sensorKey}-${Date.now()}`,
+        id: stableId,
         name: sensorName,
         type: 'sensor',
         status: 'online',
@@ -560,12 +649,11 @@ const applyMqttMessageToRoom = (room: LabRoom, message: MqttTelemetryMessage): L
     case 'esp32SLG4/occupancy': {
       const value = parseNumberPayload(message.payload);
       if (value === null) return room;
-      const nextOccupancy = value > 0 ? 1 : 0;
-      if (nextRoom.occupancy === nextOccupancy) return room;
+      const nextPresence = value > 0;
+      if (nextRoom.presenceDetected === nextPresence) return room;
       nextRoom = {
         ...nextRoom,
-        occupancy: nextOccupancy,
-        presenceDetected: nextOccupancy === 1,
+        presenceDetected: nextPresence,
       };
       nextRoom = upsertSensorFromTelemetryTopic(nextRoom, message.topic, message.receivedAt);
       break;
@@ -608,11 +696,12 @@ const applyMqttMessageToRoom = (room: LabRoom, message: MqttTelemetryMessage): L
       if (message.topic.startsWith('esp32SLG4/status/')) {
         const sensorKey = message.topic.split('/').pop() ?? '';
         const mappedName = sensorTopicNameMap[sensorKey] ?? sensorKey.toUpperCase();
+        const stableId = `iot-status-${sanitizeTopicKey(sensorKey || 'sensor')}`;
         const nextStatus = parseSensorHealthStatus(message.payload);
         if (!nextStatus) return room;
         let didSensorConnect = false;
 
-        const existingDevice = nextRoom.iotDevices.find((item) => item.name === mappedName);
+        const existingDevice = nextRoom.iotDevices.find((item) => item.id === stableId);
         if (existingDevice) {
           if (existingDevice.status === nextStatus) {
             return room;
@@ -621,7 +710,7 @@ const applyMqttMessageToRoom = (room: LabRoom, message: MqttTelemetryMessage): L
           nextRoom = {
             ...nextRoom,
             iotDevices: nextRoom.iotDevices.map((item) =>
-              item.name === mappedName
+              item.id === stableId
                 ? { ...item, status: nextStatus, lastSeen: message.receivedAt }
                 : item,
             ),
@@ -632,7 +721,7 @@ const applyMqttMessageToRoom = (room: LabRoom, message: MqttTelemetryMessage): L
             iotDevices: [
               ...nextRoom.iotDevices,
               {
-                id: `iot-${sensorKey}-${Date.now()}`,
+                id: stableId,
                 name: mappedName,
                 type: 'sensor',
                 status: nextStatus,
@@ -650,6 +739,8 @@ const applyMqttMessageToRoom = (room: LabRoom, message: MqttTelemetryMessage): L
         if (didSensorConnect) {
           nextRoom = upsertThresholdAlertsFromCurrentReadings(nextRoom);
         }
+      } else {
+        nextRoom = upsertSensorFromUnmappedTopic(nextRoom, message.topic, message.receivedAt);
       }
       break;
   }
@@ -755,8 +846,17 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         setError(nextError);
       },
       onMessage: (message) => {
+        const isGenericTopic =
+          message.topic.startsWith('esp32SLG4/') &&
+          !message.topic.startsWith('esp32SLG4/status/') &&
+          !telemetryTopicSensorMap[message.topic] &&
+          !EVENT_LIKE_TOPICS.has(message.topic) &&
+          !genericIgnoredTopicKeys.has(message.topic.split('/').pop() ?? '');
+
         const shouldAlwaysProcess =
-          EVENT_LIKE_TOPICS.has(message.topic) || message.topic.startsWith('esp32SLG4/status/');
+          EVENT_LIKE_TOPICS.has(message.topic) ||
+          message.topic.startsWith('esp32SLG4/status/') ||
+          isGenericTopic;
         if (!shouldAlwaysProcess) {
           const previousPayload = mqttLastPayloadByTopicRef.current[message.topic];
           if (previousPayload === message.payload) {
@@ -813,7 +913,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         humidity: room.humidity,
         co2Level: room.co2Level,
         lightLevel: room.lightLevel,
-        occupancy: room.occupancy,
         presenceDetected: room.presenceDetected,
       }));
 

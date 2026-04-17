@@ -408,11 +408,11 @@ export function RoomDetail() {
 
           <div className="bg-white rounded-lg shadow-sm p-6 border border-slate-200">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-slate-600">Occupancy Status</span>
+              <span className="text-sm text-slate-600">Presence Status</span>
               <Users className="w-5 h-5 text-purple-500" />
             </div>
             <div className="text-3xl font-semibold text-slate-900">
-              {room.presenceDetected || room.occupancy > 0 ? 'Occupied' : 'Empty'}
+              {room.presenceDetected ? 'Detected' : 'Clear'}
             </div>
             <div className="mt-2 text-sm text-slate-500">
               Based on presence detection, not headcount

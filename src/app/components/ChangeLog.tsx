@@ -76,7 +76,7 @@ export function ChangeLog({ roomId, maxHeight = '600px', showFilters = true }: C
         return <Droplets className="w-4 h-4" />;
       case 'co2':
         return <Wind className="w-4 h-4" />;
-      case 'occupancy':
+      case 'presence':
         return <Users className="w-4 h-4" />;
       case 'equipment':
         return <Settings className="w-4 h-4" />;
@@ -97,8 +97,8 @@ export function ChangeLog({ roomId, maxHeight = '600px', showFilters = true }: C
         return 'bg-blue-100 text-blue-700 border-blue-200';
       case 'co2':
         return 'bg-purple-100 text-purple-700 border-purple-200';
-      case 'occupancy':
-        return 'bg-cyan-100 text-cyan-700 border-cyan-200';
+      case 'presence':
+        return 'bg-emerald-100 text-emerald-700 border-emerald-200';
       case 'equipment':
         return 'bg-gray-100 text-gray-700 border-gray-200';
       case 'alert':
@@ -183,7 +183,7 @@ export function ChangeLog({ roomId, maxHeight = '600px', showFilters = true }: C
                   <SelectItem value="temperature">Temperature</SelectItem>
                   <SelectItem value="humidity">Humidity</SelectItem>
                   <SelectItem value="co2">CO₂ Level</SelectItem>
-                  <SelectItem value="occupancy">Occupancy</SelectItem>
+                  <SelectItem value="presence">Presence</SelectItem>
                   <SelectItem value="equipment">Equipment</SelectItem>
                   <SelectItem value="alert">Alerts</SelectItem>
                   <SelectItem value="status">Status</SelectItem>

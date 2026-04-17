@@ -69,7 +69,7 @@ export function DataSimulator() {
       'temperature',
       'humidity',
       'co2',
-      'occupancy',
+      'presence',
       'equipment',
     ];
     
@@ -89,8 +89,8 @@ export function DataSimulator() {
       case 'co2':
         simulateCO2Change(room);
         break;
-      case 'occupancy':
-        simulateOccupancyChange(room);
+      case 'presence':
+        simulatePresenceChange(room);
         break;
       case 'equipment':
         simulateEquipmentChange(room);
@@ -185,29 +185,28 @@ export function DataSimulator() {
     withRuntimeUpdate(room, (targetRoom) => targetRoom);
   };
 
-  const simulateOccupancyChange = (room: LabRoom) => {
-    const oldOccupancy = room.occupancy;
-    const newOccupancy = oldOccupancy > 0 ? 0 : 1;
-    
-    if (newOccupancy === oldOccupancy) {
+  const simulatePresenceChange = (room: LabRoom) => {
+    const oldPresence = room.presenceDetected;
+    const newPresence = !oldPresence;
+
+    if (newPresence === oldPresence) {
       withRuntimeUpdate(room, (targetRoom) => targetRoom);
       return;
     }
 
     withRuntimeUpdate(room, (targetRoom) => ({
       ...targetRoom,
-      occupancy: newOccupancy,
-        presenceDetected: newOccupancy === 1,
+      presenceDetected: newPresence,
     }));
 
     addLog({
       roomId: room.id,
       roomName: room.name,
-      changeType: 'occupancy',
-      field: 'Occupancy',
-      oldValue: oldOccupancy,
-      newValue: newOccupancy,
-      description: newOccupancy === 1 ? 'Someone entered the lab' : 'The lab became empty',
+      changeType: 'presence',
+      field: 'Presence',
+      oldValue: oldPresence ? 'Detected' : 'Clear',
+      newValue: newPresence ? 'Detected' : 'Clear',
+      description: newPresence ? 'Presence detected in the lab' : 'No presence detected in the lab',
     });
   };
 
