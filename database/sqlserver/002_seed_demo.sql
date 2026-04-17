@@ -117,6 +117,39 @@ DECLARE @Lab01Id BIGINT = (
 
 IF @Lab01Id IS NOT NULL
 BEGIN
+  DELETE ac
+  FROM smartlab.ActuationCommand ac
+  INNER JOIN smartlab.IoTDevice d ON d.IoTDeviceId = ac.ActuatorDeviceId
+  WHERE d.LabId = @Lab01Id;
+
+  DELETE eam
+  FROM smartlab.EquipmentActuatorMap eam
+  INNER JOIN smartlab.IoTDevice d ON d.IoTDeviceId = eam.ActuatorDeviceId
+  WHERE d.LabId = @Lab01Id;
+
+  DELETE ast
+  FROM smartlab.ActuatorState ast
+  INNER JOIN smartlab.IoTDevice d ON d.IoTDeviceId = ast.IoTDeviceId
+  WHERE d.LabId = @Lab01Id;
+
+  DELETE sr
+  FROM smartlab.SensorReading sr
+  WHERE sr.LabId = @Lab01Id;
+
+  DELETE aa
+  FROM smartlab.AutomatedAction aa
+  WHERE aa.LabId = @Lab01Id;
+
+  DELETE ap
+  FROM smartlab.ActuatorProfile ap
+  INNER JOIN smartlab.IoTDevice d ON d.IoTDeviceId = ap.IoTDeviceId
+  WHERE d.LabId = @Lab01Id;
+
+  DELETE sp
+  FROM smartlab.SensorProfile sp
+  INNER JOIN smartlab.IoTDevice d ON d.IoTDeviceId = sp.IoTDeviceId
+  WHERE d.LabId = @Lab01Id;
+
   UPDATE smartlab.Equipment
   SET DeletedAt = SYSUTCDATETIME(),
     UpdatedAt = SYSUTCDATETIME()
@@ -127,16 +160,8 @@ BEGIN
     UpdatedAt = SYSUTCDATETIME()
   WHERE LabId = @Lab01Id;
 
-  UPDATE smartlab.Actuator
-  SET DeletedAt = SYSUTCDATETIME(),
-    UpdatedAt = SYSUTCDATETIME()
-  WHERE LabId = @Lab01Id;
-
   UPDATE smartlab.Alert
   SET DeletedAt = SYSUTCDATETIME()
-  WHERE LabId = @Lab01Id;
-
-  DELETE FROM smartlab.AutomatedAction
   WHERE LabId = @Lab01Id;
 
   DELETE FROM smartlab.TelemetryReading

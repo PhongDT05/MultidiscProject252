@@ -117,6 +117,7 @@ CREATE TABLE smartlab.IoTDevice (
     DeletedAt DATETIME2(3) NULL,
     CONSTRAINT PK_IoTDevice PRIMARY KEY (IoTDeviceId),
     CONSTRAINT UQ_IoTDevice_DeviceCode UNIQUE (DeviceCode),
+    CONSTRAINT UQ_IoTDevice_IoTDeviceId_LabId UNIQUE (IoTDeviceId, LabId),
     CONSTRAINT FK_IoTDevice_Lab FOREIGN KEY (LabId) REFERENCES smartlab.Lab(LabId),
     CONSTRAINT CK_IoTDevice_DeviceType CHECK (DeviceType IN ('sensor', 'gateway', 'actuator')),
     CONSTRAINT CK_IoTDevice_Status CHECK ([Status] IN ('online', 'offline', 'error', 'warning')),
@@ -127,24 +128,44 @@ CREATE TABLE smartlab.IoTDevice (
 );
 GO
 
-CREATE TABLE smartlab.Actuator (
-    ActuatorId BIGINT IDENTITY(1,1) NOT NULL,
-    LabId BIGINT NOT NULL,
-    ActuatorCode VARCHAR(50) NOT NULL,
-    ActuatorName NVARCHAR(120) NOT NULL,
-    ActuatorType VARCHAR(20) NOT NULL,
-    [Status] VARCHAR(20) NOT NULL,
-    [Mode] VARCHAR(20) NOT NULL,
-    LastActivatedAt DATETIME2(3) NULL,
-    CreatedAt DATETIME2(3) NOT NULL CONSTRAINT DF_Actuator_CreatedAt DEFAULT (SYSUTCDATETIME()),
-    UpdatedAt DATETIME2(3) NOT NULL CONSTRAINT DF_Actuator_UpdatedAt DEFAULT (SYSUTCDATETIME()),
-    DeletedAt DATETIME2(3) NULL,
-    CONSTRAINT PK_Actuator PRIMARY KEY (ActuatorId),
-    CONSTRAINT UQ_Actuator_ActuatorCode UNIQUE (ActuatorCode),
-    CONSTRAINT FK_Actuator_Lab FOREIGN KEY (LabId) REFERENCES smartlab.Lab(LabId),
-    CONSTRAINT CK_Actuator_Type CHECK (ActuatorType IN ('hvac', 'exhaust_fan', 'lighting', 'ventilation')),
-    CONSTRAINT CK_Actuator_Status CHECK ([Status] IN ('on', 'off', 'auto')),
-    CONSTRAINT CK_Actuator_Mode CHECK ([Mode] IN ('auto', 'manual'))
+CREATE TABLE smartlab.SensorProfile (
+    IoTDeviceId BIGINT NOT NULL,
+    SensorType VARCHAR(20) NOT NULL,
+    Unit VARCHAR(20) NOT NULL,
+    SamplingPeriodSec INT NOT NULL,
+    MinValue DECIMAL(18,4) NULL,
+    MaxValue DECIMAL(18,4) NULL,
+    CONSTRAINT PK_SensorProfile PRIMARY KEY (IoTDeviceId),
+    CONSTRAINT FK_SensorProfile_IoTDevice FOREIGN KEY (IoTDeviceId) REFERENCES smartlab.IoTDevice(IoTDeviceId),
+    CONSTRAINT CK_SensorProfile_Type CHECK (SensorType IN ('temperature', 'humidity', 'co2', 'light', 'presence', 'occupancy')),
+    CONSTRAINT CK_SensorProfile_Unit CHECK (Unit IN ('C', '%', 'ppm', 'lux', 'boolean', 'people')),
+    CONSTRAINT CK_SensorProfile_Sampling CHECK (SamplingPeriodSec > 0),
+    CONSTRAINT CK_SensorProfile_Range CHECK (MinValue IS NULL OR MaxValue IS NULL OR MinValue <= MaxValue)
+);
+GO
+
+CREATE TABLE smartlab.ActuatorProfile (
+    IoTDeviceId BIGINT NOT NULL,
+    ActuatorType VARCHAR(30) NOT NULL,
+    SupportedCommands NVARCHAR(MAX) NOT NULL,
+    DefaultMode VARCHAR(20) NOT NULL CONSTRAINT DF_ActuatorProfile_DefaultMode DEFAULT ('auto'),
+    CONSTRAINT PK_ActuatorProfile PRIMARY KEY (IoTDeviceId),
+    CONSTRAINT FK_ActuatorProfile_IoTDevice FOREIGN KEY (IoTDeviceId) REFERENCES smartlab.IoTDevice(IoTDeviceId),
+    CONSTRAINT CK_ActuatorProfile_DefaultMode CHECK (DefaultMode IN ('auto', 'manual'))
+);
+GO
+
+CREATE TABLE smartlab.ActuatorState (
+    IoTDeviceId BIGINT NOT NULL,
+    [Status] VARCHAR(20) NOT NULL CONSTRAINT DF_ActuatorState_Status DEFAULT ('off'),
+    [Mode] VARCHAR(20) NOT NULL CONSTRAINT DF_ActuatorState_Mode DEFAULT ('auto'),
+    LastCommandAt DATETIME2(3) NULL,
+    LastStateChangedAt DATETIME2(3) NULL,
+    UpdatedAt DATETIME2(3) NOT NULL CONSTRAINT DF_ActuatorState_UpdatedAt DEFAULT (SYSUTCDATETIME()),
+    CONSTRAINT PK_ActuatorState PRIMARY KEY (IoTDeviceId),
+    CONSTRAINT FK_ActuatorState_ActuatorProfile FOREIGN KEY (IoTDeviceId) REFERENCES smartlab.ActuatorProfile(IoTDeviceId),
+    CONSTRAINT CK_ActuatorState_Status CHECK ([Status] IN ('on', 'off', 'auto')),
+    CONSTRAINT CK_ActuatorState_Mode CHECK ([Mode] IN ('auto', 'manual'))
 );
 GO
 
@@ -206,7 +227,7 @@ CREATE TABLE smartlab.AutomatedAction (
     ActionCode VARCHAR(50) NOT NULL,
     LabId BIGINT NOT NULL,
     AlertId BIGINT NULL,
-    ActuatorId BIGINT NULL,
+    ActuatorDeviceId BIGINT NULL,
     [Timestamp] DATETIME2(3) NOT NULL,
     TriggerDescription NVARCHAR(200) NOT NULL,
     ActionDescription NVARCHAR(200) NOT NULL,
@@ -217,7 +238,7 @@ CREATE TABLE smartlab.AutomatedAction (
     CONSTRAINT UQ_AutomatedAction_ActionCode UNIQUE (ActionCode),
     CONSTRAINT FK_AutomatedAction_Lab FOREIGN KEY (LabId) REFERENCES smartlab.Lab(LabId),
     CONSTRAINT FK_AutomatedAction_Alert FOREIGN KEY (AlertId) REFERENCES smartlab.Alert(AlertId),
-    CONSTRAINT FK_AutomatedAction_Actuator FOREIGN KEY (ActuatorId) REFERENCES smartlab.Actuator(ActuatorId)
+    CONSTRAINT FK_AutomatedAction_ActuatorDevice FOREIGN KEY (ActuatorDeviceId) REFERENCES smartlab.ActuatorProfile(IoTDeviceId)
 );
 GO
 
@@ -234,6 +255,54 @@ CREATE TABLE smartlab.TelemetryReading (
     CONSTRAINT PK_TelemetryReading PRIMARY KEY (TelemetryReadingId),
     CONSTRAINT FK_TelemetryReading_Lab FOREIGN KEY (LabId) REFERENCES smartlab.Lab(LabId),
     CONSTRAINT CK_TelemetryReading_Occupancy CHECK (Occupancy IS NULL OR Occupancy >= 0)
+);
+GO
+
+CREATE TABLE smartlab.SensorReading (
+    SensorReadingId BIGINT IDENTITY(1,1) NOT NULL,
+    IoTDeviceId BIGINT NOT NULL,
+    LabId BIGINT NOT NULL,
+    RecordedAt DATETIME2(3) NOT NULL,
+    Metric VARCHAR(20) NOT NULL,
+    Value DECIMAL(18,4) NOT NULL,
+    Unit VARCHAR(20) NOT NULL,
+    QualityFlag VARCHAR(20) NOT NULL CONSTRAINT DF_SensorReading_QualityFlag DEFAULT ('ok'),
+    CONSTRAINT PK_SensorReading PRIMARY KEY (SensorReadingId),
+    CONSTRAINT FK_SensorReading_SensorProfile FOREIGN KEY (IoTDeviceId) REFERENCES smartlab.SensorProfile(IoTDeviceId),
+    CONSTRAINT FK_SensorReading_Lab FOREIGN KEY (LabId) REFERENCES smartlab.Lab(LabId),
+    CONSTRAINT FK_SensorReading_IoTDeviceLab FOREIGN KEY (IoTDeviceId, LabId) REFERENCES smartlab.IoTDevice(IoTDeviceId, LabId),
+    CONSTRAINT CK_SensorReading_Metric CHECK (Metric IN ('temperature', 'humidity', 'co2', 'light', 'presence', 'occupancy')),
+    CONSTRAINT CK_SensorReading_Unit CHECK (Unit IN ('C', '%', 'ppm', 'lux', 'boolean', 'people')),
+    CONSTRAINT CK_SensorReading_QualityFlag CHECK (QualityFlag IN ('ok', 'outlier', 'missing'))
+);
+GO
+
+CREATE TABLE smartlab.EquipmentActuatorMap (
+    EquipmentId BIGINT NOT NULL,
+    ActuatorDeviceId BIGINT NOT NULL,
+    ControlScope VARCHAR(20) NOT NULL,
+    CONSTRAINT PK_EquipmentActuatorMap PRIMARY KEY (EquipmentId, ActuatorDeviceId),
+    CONSTRAINT FK_EquipmentActuatorMap_Equipment FOREIGN KEY (EquipmentId) REFERENCES smartlab.Equipment(EquipmentId),
+    CONSTRAINT FK_EquipmentActuatorMap_ActuatorProfile FOREIGN KEY (ActuatorDeviceId) REFERENCES smartlab.ActuatorProfile(IoTDeviceId)
+);
+GO
+
+CREATE TABLE smartlab.ActuationCommand (
+    CommandId BIGINT IDENTITY(1,1) NOT NULL,
+    ActuatorDeviceId BIGINT NOT NULL,
+    IssuedByUserId BIGINT NULL,
+    IssuedAt DATETIME2(3) NOT NULL CONSTRAINT DF_ActuationCommand_IssuedAt DEFAULT (SYSUTCDATETIME()),
+    [Source] VARCHAR(20) NOT NULL,
+    CommandType VARCHAR(30) NOT NULL,
+    PayloadJson NVARCHAR(MAX) NULL,
+    [Result] VARCHAR(20) NOT NULL,
+    CorrelationId VARCHAR(100) NULL,
+    CONSTRAINT PK_ActuationCommand PRIMARY KEY (CommandId),
+    CONSTRAINT FK_ActuationCommand_ActuatorProfile FOREIGN KEY (ActuatorDeviceId) REFERENCES smartlab.ActuatorProfile(IoTDeviceId),
+    CONSTRAINT FK_ActuationCommand_IssuedByUser FOREIGN KEY (IssuedByUserId) REFERENCES smartlab.[User](UserId),
+    CONSTRAINT CK_ActuationCommand_Source CHECK ([Source] IN ('manual', 'auto')),
+    CONSTRAINT CK_ActuationCommand_Result CHECK ([Result] IN ('success', 'failed')),
+    CONSTRAINT CK_ActuationCommand_PayloadJson CHECK (PayloadJson IS NULL OR ISJSON(PayloadJson) = 1)
 );
 GO
 
@@ -312,10 +381,15 @@ CREATE INDEX IX_User_RoleId ON smartlab.[User] (RoleId);
 CREATE INDEX IX_UserLabAssignment_LabId_UserId ON smartlab.UserLabAssignment (LabId, UserId);
 CREATE INDEX IX_Equipment_LabId_Status ON smartlab.Equipment (LabId, [Status]);
 CREATE INDEX IX_IoTDevice_LabId_Status ON smartlab.IoTDevice (LabId, [Status]);
-CREATE INDEX IX_Actuator_LabId_Status ON smartlab.Actuator (LabId, [Status]);
+CREATE INDEX IX_SensorProfile_SensorType ON smartlab.SensorProfile (SensorType);
+CREATE INDEX IX_ActuatorProfile_ActuatorType ON smartlab.ActuatorProfile (ActuatorType);
 CREATE INDEX IX_Alert_LabId_Acknowledged_Timestamp ON smartlab.Alert (LabId, IsAcknowledged, [Timestamp] DESC);
 CREATE INDEX IX_AutomatedAction_LabId_Timestamp ON smartlab.AutomatedAction (LabId, [Timestamp] DESC);
 CREATE INDEX IX_TelemetryReading_LabId_RecordedAt ON smartlab.TelemetryReading (LabId, RecordedAt DESC);
+CREATE INDEX IX_SensorReading_LabId_RecordedAt ON smartlab.SensorReading (LabId, RecordedAt DESC);
+CREATE INDEX IX_SensorReading_IoTDeviceId_RecordedAt ON smartlab.SensorReading (IoTDeviceId, RecordedAt DESC);
+CREATE INDEX IX_EquipmentActuatorMap_ActuatorDeviceId ON smartlab.EquipmentActuatorMap (ActuatorDeviceId);
+CREATE INDEX IX_ActuationCommand_ActuatorDeviceId_IssuedAt ON smartlab.ActuationCommand (ActuatorDeviceId, IssuedAt DESC);
 CREATE INDEX IX_AuditEvent_OccurredAt ON smartlab.AuditEvent (OccurredAt DESC);
 CREATE INDEX IX_AuditEvent_Category_OccurredAt ON smartlab.AuditEvent (Category, OccurredAt DESC);
 CREATE INDEX IX_DataChangeLog_ChangedAt ON smartlab.DataChangeLog (ChangedAt DESC);
