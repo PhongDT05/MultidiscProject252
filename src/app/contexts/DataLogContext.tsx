@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
+import { useAuth } from './AuthContext';
 
 export type ChangeType = 
   | 'temperature' 
@@ -21,14 +22,18 @@ export interface DataChangeLog {
   newValue: string | number;
   user?: string;
   description: string;
+  labId?: string;
 }
 
 interface DataLogContextType {
   logs: DataChangeLog[];
+  authorizedLogs: DataChangeLog[];
   addLog: (log: Omit<DataChangeLog, 'id' | 'timestamp'>) => void;
   clearLogs: () => void;
   getLogsByRoom: (roomId: string) => DataChangeLog[];
   getLogsByType: (type: ChangeType) => DataChangeLog[];
+  getAuthorizedLogsByRoom: (roomId: string) => DataChangeLog[];
+  getAuthorizedLogsByType: (type: ChangeType) => DataChangeLog[];
 }
 
 const DataLogContext = createContext<DataLogContextType | undefined>(undefined);
@@ -54,6 +59,7 @@ const readPersistedLogs = (): DataChangeLog[] => {
 };
 
 export function DataLogProvider({ children }: { children: ReactNode }) {
+  const { user, canAccessLab } = useAuth();
   const [logs, setLogs] = useState<DataChangeLog[]>(() => readPersistedLogs());
 
   useEffect(() => {
@@ -63,6 +69,16 @@ export function DataLogProvider({ children }: { children: ReactNode }) {
       // Ignore localStorage errors (quota/private mode).
     }
   }, [logs]);
+
+  // Filter logs based on user's lab access
+  const authorizedLogs = useCallback(() => {
+    return logs.filter(log => {
+      // If no labId is set on the log, it's accessible to everyone
+      if (!log.labId) return true;
+      // Otherwise, check if user can access the lab
+      return canAccessLab(log.labId);
+    });
+  }, [logs, canAccessLab]);
 
   const addLog = useCallback((log: Omit<DataChangeLog, 'id' | 'timestamp'>) => {
     const newLog: DataChangeLog = {
@@ -86,14 +102,26 @@ export function DataLogProvider({ children }: { children: ReactNode }) {
     return logs.filter(log => log.changeType === type);
   }, [logs]);
 
+  // Authorized versions that respect lab access control
+  const getAuthorizedLogsByRoom = useCallback((roomId: string) => {
+    return authorizedLogs().filter(log => log.roomId === roomId);
+  }, [authorizedLogs]);
+
+  const getAuthorizedLogsByType = useCallback((type: ChangeType) => {
+    return authorizedLogs().filter(log => log.changeType === type);
+  }, [authorizedLogs]);
+
   return (
     <DataLogContext.Provider
       value={{
         logs,
+        authorizedLogs: authorizedLogs(),
         addLog,
         clearLogs,
         getLogsByRoom,
         getLogsByType,
+        getAuthorizedLogsByRoom,
+        getAuthorizedLogsByType,
       }}
     >
       {children}

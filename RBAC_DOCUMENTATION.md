@@ -53,139 +53,55 @@ Student (Level 1)
 
 Important: Read-only behavior is delivered through Student mode.
 
-## Quick Reference - All Demo Accounts
+## Quick Reference - Canonical Demo Accounts
 
 | Category | Username | Password | Name | Scope |
 |----------|----------|----------|------|-------|
 | **Admin** | admin | admin123 | Dr. Sarah Chen | All labs |
-| | sysadmin | sysadmin123 | Michael Torres | All labs |
-| | labdirector | director123 | Prof. Rebecca Williams | All labs |
-| **Tech (Global)** | tech | tech123 | Emily Watson | All labs |
-| | maintenance | maintenance123 | David Park | All labs |
-| | supervisor | supervisor123 | Maria Rodriguez | All labs |
-| **Tech (Labs 1-3)** | manager | manager123 | John Martinez | Labs 1-3 |
-| | tech_chembio | chembio123 | Kevin O'Brien | Labs 1-3 |
-| | asst_tech1 | asst123 | Priya Patel | Labs 1-3 |
-| **Tech (Labs 4-6)** | manager2 | manager123 | Lisa Anderson | Labs 4-6 |
-| | tech_physics | physics123 | James Cohen | Labs 4-6 |
-| | asst_tech2* | asst456 | Sarah Kim | Labs 4-6 |
-| **Tech (Single Lab)** | lab1_specialist | lab1spec123 | Ahmed Hassan | Lab 1 |
-| | lab3_specialist | lab3spec123 | Elena Vasquez | Lab 3 |
-| | lab6_specialist | lab6spec123 | Yuki Tanaka | Lab 6 |
-
-*asst_tech2 is marked as **Inactive** for testing inactive account scenarios.
+| **Technician** | tech | tech123 | Emily Watson | All labs |
+| **Instructor** | instructor1 | instructor123 | Dr. Lan Instructor | Labs 2-3 |
+| **Student** | student | student123 | Guest Student | Read-only |
 
 ## Demo Accounts
 
-### Admin Accounts (Full System Access)
-All labs and features accessible. Can manage users, system configuration, and devices in all labs.
+### Admin
+Full system access.
 
 ```
-Account 1:
 Username: admin
 Password: admin123
 Name: Dr. Sarah Chen
-
-Account 2:
-Username: sysadmin
-Password: sysadmin123
-Name: Michael Torres
-
-Account 3:
-Username: labdirector
-Password: director123
-Name: Prof. Rebecca Williams
 ```
 
-### Technician Accounts (Global Scope)
-Can access and manage devices in ALL labs. No lab assignments.
+### Technician
+Operational access across all labs.
 
 ```
-Account 1:
 Username: tech
 Password: tech123
 Name: Emily Watson
-
-Account 2:
-Username: maintenance
-Password: maintenance123
-Name: David Park
-
-Account 3:
-Username: supervisor
-Password: supervisor123
-Name: Maria Rodriguez
 ```
 
-### Technician Accounts (Labs 1-3)
-Can access only assigned labs (Chemistry, Biology, Microbiology). Can manage devices only in these labs.
+### Instructor
+Lab guidance and threshold workflows for assigned labs.
 
 ```
-Account 1:
-Username: manager
-Password: manager123
-Name: John Martinez
-Assigned Labs: lab-01, lab-02, lab-03
-
-Account 2:
-Username: tech_chembio
-Password: chembio123
-Name: Kevin O'Brien
-Assigned Labs: lab-01, lab-02, lab-03
-
-Account 3:
-Username: asst_tech1
-Password: asst123
-Name: Priya Patel
-Assigned Labs: lab-01, lab-02, lab-03
+Username: instructor1
+Password: instructor123
+Name: Dr. Lan Instructor
+Assigned Labs: lab-02, lab-03
 ```
 
-### Technician Accounts (Labs 4-6)
-Can access only assigned labs (Physics, Electronics, Fab Lab). Can manage devices only in these labs.
+### Student
+Read-only access after login.
 
 ```
-Account 1:
-Username: manager2
-Password: manager123
-Name: Lisa Anderson
-Assigned Labs: lab-04, lab-05, lab-06
-
-Account 2:
-Username: tech_physics
-Password: physics123
-Name: James Cohen
-Assigned Labs: lab-04, lab-05, lab-06
-
-Account 3:
-Username: asst_tech2
-Password: asst456
-Name: Sarah Kim
-Assigned Labs: lab-04, lab-05, lab-06
-Status: Inactive (for testing inactive accounts)
+Username: student
+Password: student123
+Name: Guest Student
 ```
 
-### Technician Accounts (Single Lab Assignment)
-Specialists with access to a specific individual lab. Can manage devices only in assigned lab.
-
-```
-Account 1:
-Username: lab1_specialist
-Password: lab1spec123
-Name: Ahmed Hassan
-Assigned Lab: lab-01
-
-Account 2:
-Username: lab3_specialist
-Password: lab3spec123
-Name: Elena Vasquez
-Assigned Lab: lab-03
-
-Account 3:
-Username: lab6_specialist
-Password: lab6spec123
-Name: Yuki Tanaka
-Assigned Lab: lab-06
-```
+The older manager-style and specialist-style demo users were removed from the mock set.
 
 ## Runtime Visibility
 
@@ -194,6 +110,60 @@ Cumulative equipment worked-time is tracked and persisted for equipment entities
 - Visible to: Technician, Admin
 - Hidden from: Student
 - Runtime updates as the simulator runs and equipment remains online
+
+## Data Logs Access Control
+
+Data change logs are now restricted by lab-based access control. Users can only view logs from labs they have access to.
+
+### Log Visibility by Role
+
+#### Admin
+- Full access to all lab logs
+- Can view data change logs from any lab
+- Can view device operation logs across all facilities
+
+#### Technician (Global Scope)
+- Access to logs from all labs
+- Can view any data change log in the system
+- No lab assignment restrictions
+
+#### Technician (Lab-Scoped)
+- Access restricted to assigned labs only
+- Can view data change logs only from labs in their assigned list
+- Example: Manager assigned to Labs 1-3 can only see logs from Chemistry, Biology, and Microbiology labs
+- Cannot view logs from Labs 4-6 (Physics, Electronics, Fab Lab)
+
+#### Student
+- Cannot access data change logs (read-only role restriction)
+
+### Log Entry Structure
+
+Each data change log now includes a `labId` field that identifies which lab the change occurred in:
+
+```typescript
+interface DataChangeLog {
+  id: string;
+  timestamp: Date;
+  roomId?: string;
+  roomName?: string;
+  labId?: string;           // Lab identifier for access control
+  changeType: ChangeType;
+  field: string;
+  oldValue: string | number;
+  newValue: string | number;
+  user?: string;
+  description: string;
+}
+```
+
+### Implementation Details
+
+- Logs without a `labId` are accessible to all authorized users (global system logs)
+- Logs with a `labId` are filtered based on the user's `assignedLabs` array
+- The `DataLogContext` provides two sets of methods:
+  - `getLogsByRoom()`: Returns all logs for a room (unfiltered)
+  - `getAuthorizedLogsByRoom()`: Returns only logs the user can access
+- The ChangeLog component automatically uses authorized logs to respect user permissions
 
 ## Current Security Scope
 

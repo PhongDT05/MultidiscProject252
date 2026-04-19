@@ -288,3 +288,101 @@ CREATE INDEX IX_DataChangeLog_LabId_ChangedAt ON smartlab.DataChangeLog (LabId, 
 CREATE INDEX IX_TelemetryReading_LabId_RecordedAt ON smartlab.TelemetryReading (LabId, RecordedAt DESC);
 CREATE INDEX IX_LabRecommendation_LabId_CreatedAt ON smartlab.LabRecommendation (LabId, CreatedAt DESC);
 GO
+
+CREATE OR ALTER VIEW smartlab.vwUserAccessibleLab
+AS
+SELECT
+    ula.UserId,
+    l.LabId,
+    l.LabCode,
+    l.LabName
+FROM smartlab.UserLabAssignment ula
+INNER JOIN smartlab.Lab l ON l.LabId = ula.LabId
+WHERE l.DeletedAt IS NULL;
+GO
+
+CREATE OR ALTER PROCEDURE smartlab.usp_GetAuthorizedDataChangeLog
+    @RequestUserId BIGINT,
+    @LabCode VARCHAR(30) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT
+        dcl.DataChangeLogId,
+        l.LabCode,
+        l.LabName,
+        dcl.ChangeType,
+        dcl.FieldName,
+        dcl.OldValue,
+        dcl.NewValue,
+        dcl.Description,
+        dcl.ChangedAt,
+        dcl.ChangedByUserId,
+        u.Username AS ChangedByUsername,
+        u.DisplayName AS ChangedByDisplayName
+    FROM smartlab.DataChangeLog dcl
+    INNER JOIN smartlab.vwUserAccessibleLab ual
+        ON ual.LabId = dcl.LabId
+       AND ual.UserId = @RequestUserId
+    INNER JOIN smartlab.Lab l ON l.LabId = dcl.LabId
+    LEFT JOIN smartlab.[User] u ON u.UserId = dcl.ChangedByUserId
+    WHERE (@LabCode IS NULL OR l.LabCode = @LabCode)
+    ORDER BY dcl.ChangedAt DESC, dcl.DataChangeLogId DESC;
+END
+GO
+
+CREATE OR ALTER PROCEDURE smartlab.usp_AddDataChangeLog
+    @LabCode VARCHAR(30),
+    @ChangedByUserId BIGINT = NULL,
+    @ChangeType VARCHAR(30),
+    @FieldName NVARCHAR(100),
+    @OldValue NVARCHAR(MAX) = NULL,
+    @NewValue NVARCHAR(MAX) = NULL,
+    @Description NVARCHAR(500) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @LabId BIGINT;
+    SELECT @LabId = LabId
+    FROM smartlab.Lab
+    WHERE LabCode = @LabCode
+      AND DeletedAt IS NULL;
+
+    IF @LabId IS NULL
+    BEGIN
+        THROW 50001, 'Lab not found or deleted.', 1;
+    END
+
+    IF @ChangedByUserId IS NOT NULL
+       AND NOT EXISTS (
+           SELECT 1
+           FROM smartlab.UserLabAssignment
+           WHERE UserId = @ChangedByUserId
+             AND LabId = @LabId
+       )
+    BEGIN
+        THROW 50002, 'User is not assigned to the target lab.', 1;
+    END
+
+    INSERT INTO smartlab.DataChangeLog (
+        LabId,
+        ChangedByUserId,
+        ChangeType,
+        FieldName,
+        OldValue,
+        NewValue,
+        Description
+    )
+    VALUES (
+        @LabId,
+        @ChangedByUserId,
+        @ChangeType,
+        @FieldName,
+        @OldValue,
+        @NewValue,
+        @Description
+    );
+END
+GO

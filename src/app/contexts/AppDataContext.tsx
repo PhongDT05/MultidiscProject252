@@ -924,6 +924,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         addLog({
           roomId: room.id,
           roomName: room.name,
+          labId: room.id,
           changeType: 'system',
           field: 'telemetry_snapshot',
           oldValue: '-',

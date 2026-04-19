@@ -21,11 +21,11 @@
 
   ## SQL-Backed App Mode (Actual DB Persistence)
 
-  By default, frontend uses localStorage demo mode. To persist app data in SQL Server:
+  Frontend now uses SQL-backed API mode by default. To persist app data in SQL Server:
 
   1. Start SQL Server Docker container and load schema + seed scripts (see [database/DOCKER_DBEAVER_SETUP.md](database/DOCKER_DBEAVER_SETUP.md)).
   2. Set in `.env`:
-     - `VITE_USE_BACKEND_API=true`
+     - `VITE_USE_BACKEND_API=true` (default; set `false` only for offline demo mode)
      - `VITE_API_BASE_URL=http://localhost:4000`
   3. Start API server:
 
@@ -41,11 +41,8 @@
 
   5. Login with seeded accounts (for now plaintext demo passwords):
      - `admin / admin123`
-     - `manager / manager123`
-     - `manager2 / manager123`
      - `tech / tech123`
-      - `student / student123` (guest/student role)
-      - `student2 / student123` (student role)
+     - `student / student123` (student role)
       - `instructor1 / instructor123` (instructor role)
 
   ## Live MQTT Integration (ESP32)

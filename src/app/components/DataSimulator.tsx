@@ -115,6 +115,7 @@ export function DataSimulator() {
       addLog({
         roomId: room.id,
         roomName: room.name,
+        labId: room.id,
         changeType: 'temperature',
         field: 'Temperature',
         oldValue: oldTemp,
@@ -144,6 +145,7 @@ export function DataSimulator() {
       addLog({
         roomId: room.id,
         roomName: room.name,
+        labId: room.id,
         changeType: 'humidity',
         field: 'Humidity',
         oldValue: oldHumidity,
@@ -173,6 +175,7 @@ export function DataSimulator() {
       addLog({
         roomId: room.id,
         roomName: room.name,
+        labId: room.id,
         changeType: 'co2',
         field: 'CO₂ Level',
         oldValue: oldCO2,
@@ -202,6 +205,7 @@ export function DataSimulator() {
     addLog({
       roomId: room.id,
       roomName: room.name,
+      labId: room.id,
       changeType: 'presence',
       field: 'Presence',
       oldValue: oldPresence ? 'Detected' : 'Clear',
@@ -233,6 +237,7 @@ export function DataSimulator() {
     addLog({
       roomId: room.id,
       roomName: room.name,
+      labId: room.id,
       changeType: 'equipment',
       field: equipment.name,
       oldValue: oldStatus,

@@ -25,24 +25,12 @@ SELECT 'admin', 'admin@smartlab.local', 'admin123', 'System Admin', 1, 'active'
 WHERE NOT EXISTS (SELECT 1 FROM smartlab.[User] WHERE Username = 'admin');
 
 INSERT INTO smartlab.[User] (Username, Email, PasswordHash, DisplayName, RoleId, AccountStatus)
-SELECT 'manager', 'manager@smartlab.local', 'manager123', 'Lab Manager 1', 2, 'active'
-WHERE NOT EXISTS (SELECT 1 FROM smartlab.[User] WHERE Username = 'manager');
-
-INSERT INTO smartlab.[User] (Username, Email, PasswordHash, DisplayName, RoleId, AccountStatus)
-SELECT 'manager2', 'manager2@smartlab.local', 'manager123', 'Lab Manager 2', 2, 'active'
-WHERE NOT EXISTS (SELECT 1 FROM smartlab.[User] WHERE Username = 'manager2');
-
-INSERT INTO smartlab.[User] (Username, Email, PasswordHash, DisplayName, RoleId, AccountStatus)
 SELECT 'tech', 'tech@smartlab.local', 'tech123', 'Global Technician', 2, 'active'
 WHERE NOT EXISTS (SELECT 1 FROM smartlab.[User] WHERE Username = 'tech');
 
 INSERT INTO smartlab.[User] (Username, Email, PasswordHash, DisplayName, RoleId, AccountStatus)
 SELECT 'student', 'student@smartlab.local', 'student123', 'Guest Student', 3, 'active'
 WHERE NOT EXISTS (SELECT 1 FROM smartlab.[User] WHERE Username = 'student');
-
-INSERT INTO smartlab.[User] (Username, Email, PasswordHash, DisplayName, RoleId, AccountStatus)
-SELECT 'student2', 'student2@smartlab.local', 'student123', 'Student Nguyen', 3, 'active'
-WHERE NOT EXISTS (SELECT 1 FROM smartlab.[User] WHERE Username = 'student2');
 
 INSERT INTO smartlab.[User] (Username, Email, PasswordHash, DisplayName, RoleId, AccountStatus)
 SELECT 'instructor1', 'instructor1@smartlab.local', 'instructor123', 'Dr. Lan Instructor', 4, 'active'
@@ -55,18 +43,6 @@ SET PasswordHash = 'admin123',
 WHERE Username = 'admin';
 
 UPDATE smartlab.[User]
-SET PasswordHash = 'manager123',
-    AccountStatus = 'active',
-    UpdatedAt = SYSUTCDATETIME()
-WHERE Username = 'manager';
-
-UPDATE smartlab.[User]
-SET PasswordHash = 'manager123',
-    AccountStatus = 'active',
-    UpdatedAt = SYSUTCDATETIME()
-WHERE Username = 'manager2';
-
-UPDATE smartlab.[User]
 SET PasswordHash = 'tech123',
     AccountStatus = 'active',
     UpdatedAt = SYSUTCDATETIME()
@@ -77,12 +53,6 @@ SET PasswordHash = 'student123',
     AccountStatus = 'active',
     UpdatedAt = SYSUTCDATETIME()
 WHERE Username = 'student';
-
-UPDATE smartlab.[User]
-SET PasswordHash = 'student123',
-    AccountStatus = 'active',
-    UpdatedAt = SYSUTCDATETIME()
-WHERE Username = 'student2';
 
 UPDATE smartlab.[User]
 SET PasswordHash = 'instructor123',
@@ -169,8 +139,8 @@ GO
 INSERT INTO smartlab.UserLabAssignment (UserId, LabId)
 SELECT u.UserId, l.LabId
 FROM smartlab.[User] u
-INNER JOIN smartlab.Lab l ON l.LabCode IN ('lab-01', 'lab-02', 'lab-03')
-WHERE u.Username = 'manager'
+INNER JOIN smartlab.Lab l ON l.LabCode IN ('lab-01', 'lab-02', 'lab-03', 'lab-04', 'lab-05', 'lab-06')
+WHERE u.Username = 'tech'
   AND NOT EXISTS (
       SELECT 1 FROM smartlab.UserLabAssignment x
       WHERE x.UserId = u.UserId AND x.LabId = l.LabId
@@ -179,8 +149,8 @@ WHERE u.Username = 'manager'
 INSERT INTO smartlab.UserLabAssignment (UserId, LabId)
 SELECT u.UserId, l.LabId
 FROM smartlab.[User] u
-INNER JOIN smartlab.Lab l ON l.LabCode IN ('lab-04', 'lab-05', 'lab-06')
-WHERE u.Username = 'manager2'
+CROSS JOIN smartlab.Lab l
+WHERE u.Username = 'admin'
   AND NOT EXISTS (
       SELECT 1 FROM smartlab.UserLabAssignment x
       WHERE x.UserId = u.UserId AND x.LabId = l.LabId
@@ -217,7 +187,7 @@ GO
 DECLARE @Lab02Id BIGINT = (SELECT TOP 1 LabId FROM smartlab.Lab WHERE LabCode = 'lab-02' AND DeletedAt IS NULL);
 DECLARE @Lab03Id BIGINT = (SELECT TOP 1 LabId FROM smartlab.Lab WHERE LabCode = 'lab-03' AND DeletedAt IS NULL);
 DECLARE @TechUserId BIGINT = (SELECT TOP 1 UserId FROM smartlab.[User] WHERE Username = 'tech' AND DeletedAt IS NULL);
-DECLARE @StudentUserId BIGINT = (SELECT TOP 1 UserId FROM smartlab.[User] WHERE Username = 'student2' AND DeletedAt IS NULL);
+DECLARE @StudentUserId BIGINT = (SELECT TOP 1 UserId FROM smartlab.[User] WHERE Username = 'student' AND DeletedAt IS NULL);
 DECLARE @InstructorUserId BIGINT = (SELECT TOP 1 UserId FROM smartlab.[User] WHERE Username = 'instructor1' AND DeletedAt IS NULL);
 
 IF @Lab02Id IS NULL OR @Lab03Id IS NULL OR @TechUserId IS NULL OR @StudentUserId IS NULL OR @InstructorUserId IS NULL

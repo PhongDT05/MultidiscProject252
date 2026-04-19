@@ -28,14 +28,14 @@ interface ChangeLogProps {
 }
 
 export function ChangeLog({ roomId, maxHeight = '600px', showFilters = true }: ChangeLogProps) {
-  const { logs, clearLogs, getLogsByRoom } = useDataLog();
+  const { authorizedLogs, clearLogs, getAuthorizedLogsByRoom } = useDataLog();
   const [filterType, setFilterType] = useState<ChangeType | 'all'>('all');
   const [filterRoom, setFilterRoom] = useState<string>('all');
   const [timeWindow, setTimeWindow] = useState<string>('all');
 
-  // Get filtered logs
+  // Get filtered logs (using authorized logs only)
   const filteredLogs = useMemo(() => {
-    let filtered = roomId ? getLogsByRoom(roomId) : logs;
+    let filtered = roomId ? getAuthorizedLogsByRoom(roomId) : authorizedLogs;
 
     if (filterType !== 'all') {
       filtered = filtered.filter(log => log.changeType === filterType);
@@ -55,18 +55,18 @@ export function ChangeLog({ roomId, maxHeight = '600px', showFilters = true }: C
     }
 
     return filtered;
-  }, [logs, roomId, filterType, filterRoom, timeWindow, getLogsByRoom]);
+  }, [authorizedLogs, roomId, filterType, filterRoom, timeWindow, getAuthorizedLogsByRoom]);
 
-  // Get unique rooms
+  // Get unique rooms from authorized logs only
   const uniqueRooms = useMemo(() => {
     const rooms = new Map<string, string>();
-    logs.forEach(log => {
+    authorizedLogs.forEach(log => {
       if (log.roomId && log.roomName) {
         rooms.set(log.roomId, log.roomName);
       }
     });
     return Array.from(rooms.entries());
-  }, [logs]);
+  }, [authorizedLogs]);
 
   const getChangeIcon = (type: ChangeType) => {
     switch (type) {
@@ -154,7 +154,7 @@ export function ChangeLog({ roomId, maxHeight = '600px', showFilters = true }: C
               {filteredLogs.length} {filteredLogs.length === 1 ? 'entry' : 'entries'}
             </Badge>
           </div>
-          {logs.length > 0 && (
+          {authorizedLogs.length > 0 && (
             <Button
               variant="outline"
               size="sm"

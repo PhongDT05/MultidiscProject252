@@ -9,6 +9,11 @@ const PORT = Number(process.env.API_PORT || 4000);
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '1mb' }));
 
+const toFiniteNumberOrNull = (value) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
 async function assertLabsAreAvailableForInstructor(requestFactory, labs, excludeUserId = null) {
   for (const rawLabCode of labs) {
     const checkReq = requestFactory();
@@ -486,34 +491,59 @@ app.put('/api/labs', async (req, res) => {
 
 app.post('/api/telemetry/snapshots', async (req, res) => {
   const payloadLabs = Array.isArray(req.body?.labs) ? req.body.labs : [];
-  const recordedAt = req.body?.recordedAt ? new Date(req.body.recordedAt) : new Date();
+  const parsedRecordedAt = req.body?.recordedAt ? new Date(req.body.recordedAt) : new Date();
+  const recordedAt = Number.isNaN(parsedRecordedAt.getTime()) ? new Date() : parsedRecordedAt;
 
   if (payloadLabs.length === 0) {
     return res.status(400).json({ error: 'At least one lab snapshot is required.' });
   }
 
+  const snapshots = payloadLabs
+    .map((snapshot) => ({
+      labCode: String(snapshot.id || snapshot.labId || '').trim(),
+      temperature: toFiniteNumberOrNull(snapshot.temperature),
+      humidity: toFiniteNumberOrNull(snapshot.humidity),
+      co2Level: toFiniteNumberOrNull(snapshot.co2Level),
+      lightLevel: toFiniteNumberOrNull(snapshot.lightLevel),
+      presenceDetected: snapshot.presenceDetected == null ? null : Boolean(snapshot.presenceDetected),
+    }))
+    .filter((snapshot) => snapshot.labCode.length > 0);
+
+  if (snapshots.length === 0) {
+    return res.status(400).json({ error: 'No valid lab snapshots were provided.' });
+  }
+
   await executeInTransaction(async (requestFactory) => {
-    for (const snapshot of payloadLabs) {
+    for (const snapshot of snapshots) {
       const request = requestFactory();
-      request.input('labCode', sql.VarChar(30), String(snapshot.id || snapshot.labId || ''));
+      request.input('labCode', sql.VarChar(30), snapshot.labCode);
       request.input('recordedAt', sql.DateTime2, recordedAt);
-      request.input('temperature', sql.Decimal(5, 2), Number(snapshot.temperature));
-      request.input('humidity', sql.Decimal(5, 2), Number(snapshot.humidity));
-      request.input('co2Level', sql.Decimal(8, 2), Number(snapshot.co2Level));
-      request.input('lightLevel', sql.Decimal(8, 2), Number(snapshot.lightLevel));
-      const presenceDetected = Boolean(snapshot.presenceDetected);
-      request.input('presenceDetected', sql.Bit, presenceDetected ? 1 : 0);
+      request.input('temperature', sql.Decimal(5, 2), snapshot.temperature);
+      request.input('humidity', sql.Decimal(5, 2), snapshot.humidity);
+      request.input('co2Level', sql.Decimal(8, 2), snapshot.co2Level);
+      request.input('lightLevel', sql.Decimal(8, 2), snapshot.lightLevel);
+      request.input('presenceDetected', sql.Bit, snapshot.presenceDetected == null ? null : (snapshot.presenceDetected ? 1 : 0));
 
       await request.query(
         `INSERT INTO smartlab.TelemetryReading (LabId, RecordedAt, Temperature, Humidity, Co2Level, LightLevel, PresenceDetected)
         SELECT l.LabId, @recordedAt, @temperature, @humidity, @co2Level, @lightLevel, @presenceDetected
+         FROM smartlab.Lab l
+         WHERE l.LabCode = @labCode;
+
+         UPDATE l
+         SET l.Temperature = COALESCE(@temperature, l.Temperature),
+             l.Humidity = COALESCE(@humidity, l.Humidity),
+             l.Co2Level = COALESCE(@co2Level, l.Co2Level),
+             l.LightLevel = COALESCE(@lightLevel, l.LightLevel),
+             l.PresenceDetected = COALESCE(@presenceDetected, l.PresenceDetected),
+             l.UpdatedAt = SYSUTCDATETIME()
          FROM smartlab.Lab l
          WHERE l.LabCode = @labCode`,
       );
     }
   });
 
-  res.json({ ok: true, recordedAt: recordedAt.toISOString(), count: payloadLabs.length });
+  res.json({ ok: true, recordedAt: recordedAt.toISOString(), count: snapshots.length });
 });
 
 app.get('/api/telemetry/history', async (req, res) => {

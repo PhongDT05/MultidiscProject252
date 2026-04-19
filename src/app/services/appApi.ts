@@ -9,7 +9,9 @@ const LAB01_EMPTY_BASELINE_MIGRATION_KEY = 'smartlab_migration_lab01_empty_basel
 const RECOMMENDATIONS_KEY = 'smartlab_lab_recommendations_v1';
 
 const API_DELAY_MS = 250;
-const useBackendApi = import.meta.env.VITE_USE_BACKEND_API?.toString().toLowerCase() === 'true';
+// Backend mode is enabled by default so frontend writes persist to SQL Server.
+// Set VITE_USE_BACKEND_API=false to force localStorage demo mode.
+const useBackendApi = import.meta.env.VITE_USE_BACKEND_API?.toString().toLowerCase() !== 'false';
 
 const cloneInitialLabs = (): LabRoom[] =>
   labRooms.map((room) => ({
@@ -132,28 +134,8 @@ const defaultAccounts: AuthAccount[] = [
     lastLogin: '2026-03-27 14:32',
     password: 'admin123',
   },
-  {
-    id: '101',
-    username: 'sysadmin',
-    email: 'sysadmin@smartlab.com',
-    name: 'Michael Torres',
-    role: 'admin',
-    status: 'active',
-    lastLogin: '2026-03-26 16:45',
-    password: 'sysadmin123',
-  },
-  {
-    id: '102',
-    username: 'labdirector',
-    email: 'director@smartlab.com',
-    name: 'Prof. Rebecca Williams',
-    role: 'admin',
-    status: 'active',
-    lastLogin: '2026-03-27 09:00',
-    password: 'director123',
-  },
 
-  // ============ TECHNICIANS (GLOBAL SCOPE) ============
+  // ============ TECHNICIANS ============
   {
     id: '3',
     username: 'tech',
@@ -164,132 +146,6 @@ const defaultAccounts: AuthAccount[] = [
     lastLogin: '2026-03-27 13:20',
     password: 'tech123',
   },
-  {
-    id: '201',
-    username: 'maintenance',
-    email: 'maintenance@smartlab.com',
-    name: 'David Park',
-    role: 'technician',
-    status: 'active',
-    lastLogin: '2026-03-27 10:15',
-    password: 'maintenance123',
-  },
-  {
-    id: '202',
-    username: 'supervisor',
-    email: 'supervisor@smartlab.com',
-    name: 'Maria Rodriguez',
-    role: 'technician',
-    status: 'active',
-    lastLogin: '2026-03-25 15:30',
-    password: 'supervisor123',
-  },
-
-  // ============ TECHNICIANS (LABS 1-3) ============
-  {
-    id: '2',
-    username: 'manager',
-    email: 'manager@smartlab.com',
-    name: 'John Martinez',
-    role: 'technician',
-    status: 'active',
-    lastLogin: '2026-03-27 11:45',
-    password: 'manager123',
-    assignedLabs: ['lab-01', 'lab-02', 'lab-03'],
-  },
-  {
-    id: '203',
-    username: 'tech_chembio',
-    email: 'tech.chembio@smartlab.com',
-    name: 'Kevin O\'Brien',
-    role: 'technician',
-    status: 'active',
-    lastLogin: '2026-03-27 08:30',
-    password: 'chembio123',
-    assignedLabs: ['lab-01', 'lab-02', 'lab-03'],
-  },
-  {
-    id: '204',
-    username: 'asst_tech1',
-    email: 'assistant.tech1@smartlab.com',
-    name: 'Priya Patel',
-    role: 'technician',
-    status: 'active',
-    lastLogin: '2026-03-26 14:00',
-    password: 'asst123',
-    assignedLabs: ['lab-01', 'lab-02', 'lab-03'],
-  },
-
-  // ============ TECHNICIANS (LABS 4-6) ============
-  {
-    id: '5',
-    username: 'manager2',
-    email: 'manager2@smartlab.com',
-    name: 'Lisa Anderson',
-    role: 'technician',
-    status: 'active',
-    lastLogin: '2026-03-27 12:10',
-    password: 'manager123',
-    assignedLabs: ['lab-04', 'lab-05', 'lab-06'],
-  },
-  {
-    id: '205',
-    username: 'tech_physics',
-    email: 'tech.physics@smartlab.com',
-    name: 'James Cohen',
-    role: 'technician',
-    status: 'active',
-    lastLogin: '2026-03-27 09:45',
-    password: 'physics123',
-    assignedLabs: ['lab-04', 'lab-05', 'lab-06'],
-  },
-  {
-    id: '206',
-    username: 'asst_tech2',
-    email: 'assistant.tech2@smartlab.com',
-    name: 'Sarah Kim',
-    role: 'technician',
-    status: 'inactive',
-    lastLogin: '2026-03-15 10:20',
-    password: 'asst456',
-    assignedLabs: ['lab-04', 'lab-05', 'lab-06'],
-  },
-
-  // ============ TECHNICIANS (SINGLE LAB ASSIGNMENT) ============
-  {
-    id: '207',
-    username: 'lab1_specialist',
-    email: 'specialist.lab1@smartlab.com',
-    name: 'Ahmed Hassan',
-    role: 'technician',
-    status: 'active',
-    lastLogin: '2026-03-24 11:00',
-    password: 'lab1spec123',
-    assignedLabs: ['lab-01'],
-  },
-  {
-    id: '208',
-    username: 'lab3_specialist',
-    email: 'specialist.lab3@smartlab.com',
-    name: 'Elena Vasquez',
-    role: 'technician',
-    status: 'active',
-    lastLogin: '2026-03-23 13:30',
-    password: 'lab3spec123',
-    assignedLabs: ['lab-03'],
-  },
-  {
-    id: '209',
-    username: 'lab6_specialist',
-    email: 'specialist.lab6@smartlab.com',
-    name: 'Yuki Tanaka',
-    role: 'technician',
-    status: 'active',
-    lastLogin: '2026-03-20 09:15',
-    password: 'lab6spec123',
-    assignedLabs: ['lab-06'],
-  },
-
   // ============ STUDENT / GUEST ============
   {
     id: '301',
@@ -301,16 +157,7 @@ const defaultAccounts: AuthAccount[] = [
     lastLogin: '2026-03-19 10:05',
     password: 'student123',
   },
-  {
-    id: '302',
-    username: 'student2',
-    email: 'student2@smartlab.com',
-    name: 'Student Nguyen',
-    role: 'student',
-    status: 'active',
-    lastLogin: '2026-03-18 09:15',
-    password: 'student123',
-  },
+  // ============ INSTRUCTOR ============
   {
     id: '401',
     username: 'instructor1',
