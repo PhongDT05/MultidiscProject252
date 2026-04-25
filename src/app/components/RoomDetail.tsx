@@ -7,6 +7,7 @@ import { appApi } from "../services/appApi";
 import { ChangeLog } from "./ChangeLog";
 import { DataSimulator } from "./DataSimulator";
 import { DeviceInsertion } from "./DeviceInsertion";
+import { Badge } from "./ui/badge";
 import {
   Thermometer,
   Droplets,
@@ -60,6 +61,7 @@ export function RoomDetail() {
   // Check if user can control equipment (technician and above)
   const canControlEquipment = hasPermission('technician');
   const canViewLogsAndRuntime = hasAnyPermission(['technician', 'admin']);
+  const canRespondToRecommendations = Boolean(room && hasAnyPermission(['instructor', 'admin']) && canAccessLab(room.id));
   const canAddDevices = hasPermission('technician') && canAccessLab(room?.id || '');
   const canSendRecommendation = Boolean(user && user.role === 'student' && room && canAccessLab(room.id));
 
@@ -137,6 +139,19 @@ export function RoomDetail() {
       setRecommendationError(error instanceof Error ? error.message : 'Unable to send recommendation.');
     } finally {
       setSubmittingRecommendation(false);
+    }
+  };
+
+  const respondToRecommendation = async (recommendationId: string, status: 'reviewed' | 'dismissed') => {
+    if (!room || !canRespondToRecommendations) return;
+
+    setRecommendationError(null);
+    try {
+      await appApi.updateRecommendationStatus(recommendationId, status);
+      const latest = await appApi.getRecommendations(room.id);
+      setRecommendations(latest);
+    } catch (error) {
+      setRecommendationError(error instanceof Error ? error.message : 'Unable to update recommendation status.');
     }
   };
 
@@ -224,10 +239,35 @@ export function RoomDetail() {
     },
   ] as const;
 
+  const getRecommendationStatusStyle = (status: string) => {
+    switch (status) {
+      case 'reviewed':
+        return 'bg-emerald-100 text-emerald-700 border-emerald-200';
+      case 'dismissed':
+        return 'bg-slate-100 text-slate-700 border-slate-200';
+      default:
+        return 'bg-amber-100 text-amber-700 border-amber-200';
+    }
+  };
+
+  const getRecommendationStatusText = (status: string) => {
+    switch (status) {
+      case 'reviewed':
+        return 'Acknowledged by instructor';
+      case 'dismissed':
+        return 'Dismissed by instructor';
+      default:
+        return 'Awaiting instructor response';
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Data Simulator - runs in background */}
       <DataSimulator />
+
+      <div className="space-y-8 xl:grid xl:grid-cols-[minmax(0,1fr)_380px] xl:items-start xl:gap-8">
+        <div className="space-y-8">
       
       {/* Room Header */}
       <div className="mb-8">
@@ -281,17 +321,24 @@ export function RoomDetail() {
                     <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5" />
                   )}
                   <div className="flex-1">
-                    <p
-                      className={`font-medium ${
-                        alert.type === "critical"
-                          ? "text-red-900"
-                          : alert.type === "warning"
-                          ? "text-amber-900"
-                          : "text-blue-900"
-                      }`}
-                    >
-                      {alert.message}
-                    </p>
+                    <div className="flex items-start justify-between gap-3">
+                      <p
+                        className={`font-medium ${
+                          alert.type === "critical"
+                            ? "text-red-900"
+                            : alert.type === "warning"
+                            ? "text-amber-900"
+                            : "text-blue-900"
+                        }`}
+                      >
+                        {alert.message}
+                      </p>
+                      {alert.acknowledged && (
+                        <Badge variant="outline" className="shrink-0 border-emerald-200 bg-emerald-50 text-emerald-700">
+                          Acknowledged
+                        </Badge>
+                      )}
+                    </div>
                     <p
                       className={`text-sm mt-1 ${
                         alert.type === "critical"
@@ -303,6 +350,12 @@ export function RoomDetail() {
                     >
                       {new Date(alert.timestamp).toLocaleString()}
                     </p>
+                    {alert.acknowledged && (
+                      <p className="mt-2 text-xs text-emerald-700">
+                        Responded by {alert.acknowledgedBy ?? 'instructor'}
+                        {alert.acknowledgedAt ? ` on ${new Date(alert.acknowledgedAt).toLocaleString()}` : ''}
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -348,10 +401,31 @@ export function RoomDetail() {
           <div className="space-y-3">
             {recommendations.map((item) => (
               <div key={item.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                <p className="text-sm text-slate-800">{item.message}</p>
+                <div className="flex items-start justify-between gap-3">
+                  <p className="text-sm text-slate-800">{item.message}</p>
+                  <Badge variant="outline" className={getRecommendationStatusStyle(item.status)}>
+                    {getRecommendationStatusText(item.status)}
+                  </Badge>
+                </div>
                 <p className="mt-2 text-xs text-slate-500">
                   From {item.studentName} to {item.instructorName} • {new Date(item.createdAt).toLocaleString()}
                 </p>
+                {canRespondToRecommendations && item.status === 'pending' && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      onClick={() => respondToRecommendation(item.id, 'reviewed')}
+                      className="inline-flex items-center rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-emerald-700"
+                    >
+                      Acknowledge
+                    </button>
+                    <button
+                      onClick={() => respondToRecommendation(item.id, 'dismissed')}
+                      className="inline-flex items-center rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -731,12 +805,14 @@ export function RoomDetail() {
         </div>
       </div>
 
-      {/* Room-Specific Change Log */}
-      {canViewLogsAndRuntime && (
-        <div className="mt-8">
-          <ChangeLog roomId={room.id} maxHeight="400px" showFilters={true} />
         </div>
-      )}
+
+        {canViewLogsAndRuntime && (
+          <aside className="xl:sticky xl:top-8">
+            <ChangeLog roomId={room.id} maxHeight="calc(100vh - 4rem)" showFilters={true} />
+          </aside>
+        )}
+      </div>
 
       {/* Device Insertion Modal */}
       {room && (

@@ -554,6 +554,28 @@ export const appApi = {
     writeRecommendations([nextRecommendation, ...readRecommendations()]);
   },
 
+  async updateRecommendationStatus(
+    recommendationId: string,
+    status: 'reviewed' | 'dismissed',
+  ): Promise<void> {
+    if (useBackendApi) {
+      await backendApi.updateRecommendationStatus(recommendationId, status);
+      return;
+    }
+
+    await sleep(120);
+    const items = readRecommendations();
+    const nextItems = items.map((item) =>
+      item.id === recommendationId ? { ...item, status } : item,
+    );
+
+    if (!nextItems.some((item) => item.id === recommendationId)) {
+      throw new Error('Recommendation not found.');
+    }
+
+    writeRecommendations(nextItems);
+  },
+
   // Device creation helpers (exported for use in other services and context)
   generateDeviceId,
   createIoTDeviceWithDefaults,

@@ -13,6 +13,7 @@ import {
   Users, 
   AlertCircle,
   Settings,
+  SlidersHorizontal,
   TrendingUp,
   TrendingDown,
   Minus,
@@ -27,11 +28,37 @@ interface ChangeLogProps {
   showFilters?: boolean;
 }
 
+type EventFilter = 'all' | 'open-door' | 'fan' | 'cooling' | 'light' | 'alert';
+
 export function ChangeLog({ roomId, maxHeight = '600px', showFilters = true }: ChangeLogProps) {
   const { authorizedLogs, clearLogs, getAuthorizedLogsByRoom } = useDataLog();
   const [filterType, setFilterType] = useState<ChangeType | 'all'>('all');
+  const [filterEvent, setFilterEvent] = useState<EventFilter>('all');
   const [filterRoom, setFilterRoom] = useState<string>('all');
   const [timeWindow, setTimeWindow] = useState<string>('all');
+
+  const matchesEventFilter = (event: EventFilter, log: { changeType: ChangeType; field: string; description: string; oldValue: string | number; newValue: string | number }) => {
+    if (event === 'all') return true;
+
+    const haystack = `${log.field} ${log.description} ${log.oldValue} ${log.newValue}`.toLowerCase();
+
+    switch (event) {
+      case 'open-door':
+        return haystack.includes('door') ||
+          haystack.includes('presence detected') ||
+          (log.changeType === 'presence' && haystack.includes('detected'));
+      case 'fan':
+        return haystack.includes('fan') || haystack.includes('ventilation');
+      case 'cooling':
+        return haystack.includes('cooling') || haystack.includes('hvac');
+      case 'light':
+        return haystack.includes('light') || haystack.includes('lighting');
+      case 'alert':
+        return log.changeType === 'alert' || haystack.includes('alert') || haystack.includes('critical') || haystack.includes('warning');
+      default:
+        return true;
+    }
+  };
 
   // Get filtered logs (using authorized logs only)
   const filteredLogs = useMemo(() => {
@@ -39,6 +66,10 @@ export function ChangeLog({ roomId, maxHeight = '600px', showFilters = true }: C
 
     if (filterType !== 'all') {
       filtered = filtered.filter(log => log.changeType === filterType);
+    }
+
+    if (filterEvent !== 'all') {
+      filtered = filtered.filter((log) => matchesEventFilter(filterEvent, log));
     }
 
     if (filterRoom !== 'all' && !roomId) {
@@ -55,7 +86,7 @@ export function ChangeLog({ roomId, maxHeight = '600px', showFilters = true }: C
     }
 
     return filtered;
-  }, [authorizedLogs, roomId, filterType, filterRoom, timeWindow, getAuthorizedLogsByRoom]);
+  }, [authorizedLogs, roomId, filterType, filterEvent, filterRoom, timeWindow, getAuthorizedLogsByRoom]);
 
   // Get unique rooms from authorized logs only
   const uniqueRooms = useMemo(() => {
@@ -84,6 +115,8 @@ export function ChangeLog({ roomId, maxHeight = '600px', showFilters = true }: C
         return <AlertCircle className="w-4 h-4" />;
       case 'status':
         return <Activity className="w-4 h-4" />;
+      case 'threshold':
+        return <SlidersHorizontal className="w-4 h-4" />;
       default:
         return <Clock className="w-4 h-4" />;
     }
@@ -105,6 +138,8 @@ export function ChangeLog({ roomId, maxHeight = '600px', showFilters = true }: C
         return 'bg-red-100 text-red-700 border-red-200';
       case 'status':
         return 'bg-green-100 text-green-700 border-green-200';
+      case 'threshold':
+        return 'bg-amber-100 text-amber-700 border-amber-200';
       default:
         return 'bg-slate-100 text-slate-700 border-slate-200';
     }
@@ -169,8 +204,9 @@ export function ChangeLog({ roomId, maxHeight = '600px', showFilters = true }: C
 
         {/* Filters */}
         {showFilters && (
-          <div className="flex gap-2">
-            <div className="flex-1">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Type</p>
               <Select value={filterType} onValueChange={(value) => setFilterType(value as ChangeType | 'all')}>
                 <SelectTrigger className="h-9">
                   <div className="flex items-center gap-2">
@@ -187,13 +223,32 @@ export function ChangeLog({ roomId, maxHeight = '600px', showFilters = true }: C
                   <SelectItem value="equipment">Equipment</SelectItem>
                   <SelectItem value="alert">Alerts</SelectItem>
                   <SelectItem value="status">Status</SelectItem>
+                  <SelectItem value="threshold">Thresholds</SelectItem>
                   <SelectItem value="system">System</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
+            <div className="space-y-1">
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Event</p>
+              <Select value={filterEvent} onValueChange={(value) => setFilterEvent(value as EventFilter)}>
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="Filter by event" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Events</SelectItem>
+                  <SelectItem value="open-door">Open Door</SelectItem>
+                  <SelectItem value="fan">Fan</SelectItem>
+                  <SelectItem value="cooling">Cooling</SelectItem>
+                  <SelectItem value="light">Light</SelectItem>
+                  <SelectItem value="alert">Alert</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             {!roomId && uniqueRooms.length > 0 && (
-              <div className="flex-1">
+              <div className="space-y-1">
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Room</p>
                 <Select value={filterRoom} onValueChange={setFilterRoom}>
                   <SelectTrigger className="h-9">
                     <SelectValue placeholder="Filter by room" />
@@ -210,10 +265,11 @@ export function ChangeLog({ roomId, maxHeight = '600px', showFilters = true }: C
               </div>
             )}
 
-            <div className="flex-1">
+            <div className="space-y-1">
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Timestamp</p>
               <Select value={timeWindow} onValueChange={setTimeWindow}>
                 <SelectTrigger className="h-9">
-                  <SelectValue placeholder="Filter by time" />
+                  <SelectValue placeholder="Filter by timestamp" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Time</SelectItem>
@@ -250,7 +306,7 @@ export function ChangeLog({ roomId, maxHeight = '600px', showFilters = true }: C
                   key={log.id}
                   className="border rounded-lg p-3 bg-white hover:shadow-sm transition-shadow"
                 >
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3">
                     <div className="flex items-start gap-3 flex-1">
                       {/* Icon */}
                       <div className={`p-2 rounded-lg ${getChangeBadgeColor(log.changeType)}`}>
@@ -298,13 +354,15 @@ export function ChangeLog({ roomId, maxHeight = '600px', showFilters = true }: C
                             Modified by: {log.user}
                           </p>
                         )}
-                      </div>
-                    </div>
 
-                    {/* Timestamp */}
-                    <div className="flex items-center gap-1 text-xs text-gray-500 shrink-0">
-                      <Clock className="w-3 h-3" />
-                      {formatTimestamp(log.timestamp)}
+                        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-gray-500">
+                          <span className="inline-flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {formatTimestamp(log.timestamp)}
+                          </span>
+                          <span>{log.timestamp.toLocaleString()}</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>

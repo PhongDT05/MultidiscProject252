@@ -115,6 +115,9 @@ export function MainDashboard() {
           {error}
         </div>
       )}
+
+      <div className="space-y-8 xl:grid xl:grid-cols-[minmax(0,1fr)_380px] xl:items-start xl:gap-8">
+        <div className="space-y-8">
       
       {/* Lab Access Info Banner */}
       {hasRestrictedAccess && (
@@ -505,12 +508,14 @@ export function MainDashboard() {
         </div>
       </div>
 
-      {/* Data Change Log */}
-      {canViewLogs && (
-        <div className="mt-8">
-          <ChangeLog maxHeight="500px" showFilters={true} />
         </div>
-      )}
+
+        {canViewLogs && (
+          <aside className="xl:sticky xl:top-8">
+            <ChangeLog maxHeight="calc(100vh - 4rem)" showFilters={true} />
+          </aside>
+        )}
+      </div>
     </div>
   );
 }

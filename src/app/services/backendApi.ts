@@ -20,6 +20,24 @@ export interface LabRecommendation {
   instructorName: string;
 }
 
+export interface SendMqttCommandResult {
+  ok: boolean;
+  topic: string;
+  envelope: {
+    id: string;
+    command: string;
+    issuedAt: string;
+    source: string;
+    metadata?: Record<string, unknown>;
+  };
+}
+
+export interface UpdateRecommendationStatusResult {
+  ok: boolean;
+  id: string;
+  status: 'pending' | 'reviewed' | 'dismissed';
+}
+
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL?.toString() || 'http://localhost:4000').replace(/\/$/, '');
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -135,6 +153,30 @@ export const backendApi = {
     await request<{ ok: boolean }>('/api/recommendations', {
       method: 'POST',
       body: JSON.stringify({ labId, studentUserId, message }),
+    });
+  },
+
+  async updateRecommendationStatus(
+    recommendationId: string,
+    status: 'reviewed' | 'dismissed',
+  ): Promise<UpdateRecommendationStatusResult> {
+    return request<UpdateRecommendationStatusResult>(`/api/recommendations/${encodeURIComponent(recommendationId)}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    });
+  },
+
+  async sendMqttCommand(
+    command: string,
+    options?: { topic?: string; metadata?: Record<string, unknown> },
+  ): Promise<SendMqttCommandResult> {
+    return request<SendMqttCommandResult>('/api/mqtt/commands', {
+      method: 'POST',
+      body: JSON.stringify({
+        command,
+        topic: options?.topic,
+        metadata: options?.metadata,
+      }),
     });
   },
 };

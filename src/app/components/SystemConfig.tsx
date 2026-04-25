@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { backendApi } from '../services/backendApi';
 import {
   Settings,
   Bell,
@@ -73,6 +74,10 @@ export function SystemConfig() {
   const [settings, setSettings] = useState<SystemSettings>(defaultSettings);
   const [activeTab, setActiveTab] = useState<'thresholds' | 'notifications' | 'data' | 'system'>('thresholds');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [commandTopic, setCommandTopic] = useState('esp32SLG4/commands');
+  const [commandPayload, setCommandPayload] = useState('off');
+  const [commandStatus, setCommandStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
+  const [commandFeedback, setCommandFeedback] = useState('');
 
   // Only admins can access this component
   if (!hasPermission('admin')) {
@@ -121,6 +126,61 @@ export function SystemConfig() {
         }
       };
       reader.readAsText(file);
+    }
+  };
+
+  const handleSendGatewayCommand = async () => {
+    const command = commandPayload.trim();
+    const topic = commandTopic.trim();
+
+    if (!command || !topic) {
+      setCommandStatus('error');
+      setCommandFeedback('Both topic and command are required.');
+      return;
+    }
+
+    setCommandStatus('sending');
+    setCommandFeedback('');
+
+    try {
+      const result = await backendApi.sendMqttCommand(command, {
+        topic,
+        metadata: {
+          panel: 'SystemConfig',
+        },
+      });
+      setCommandStatus('success');
+      setCommandFeedback(`Published to ${result.topic} (id: ${result.envelope.id})`);
+    } catch (error) {
+      setCommandStatus('error');
+      setCommandFeedback(error instanceof Error ? error.message : 'Failed to publish MQTT command.');
+    }
+  };
+
+  const publishSingleParameterCommand = async (command: string) => {
+    const topic = commandTopic.trim();
+    const trimmedCommand = command.trim();
+
+    if (!topic || !trimmedCommand) {
+      return;
+    }
+
+    setCommandStatus('sending');
+    setCommandFeedback('');
+
+    try {
+      const result = await backendApi.sendMqttCommand(trimmedCommand, {
+        topic,
+        metadata: {
+          panel: 'SystemConfig',
+          mode: 'single-parameter',
+        },
+      });
+      setCommandStatus('success');
+      setCommandFeedback(`Published ${trimmedCommand} to ${result.topic}`);
+    } catch (error) {
+      setCommandStatus('error');
+      setCommandFeedback(error instanceof Error ? error.message : 'Failed to publish MQTT command.');
     }
   };
 
@@ -246,6 +306,9 @@ export function SystemConfig() {
                       temperature: { ...settings.alertThresholds.temperature, min: Number(e.target.value) }
                     }
                   })}
+                  onBlur={() => {
+                    void publishSingleParameterCommand(`temp_min=${settings.alertThresholds.temperature.min}`);
+                  }}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -263,6 +326,9 @@ export function SystemConfig() {
                       temperature: { ...settings.alertThresholds.temperature, max: Number(e.target.value) }
                     }
                   })}
+                  onBlur={() => {
+                    void publishSingleParameterCommand(`temp_max=${settings.alertThresholds.temperature.max}`);
+                  }}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -312,6 +378,9 @@ export function SystemConfig() {
                       humidity: { ...settings.alertThresholds.humidity, min: Number(e.target.value) }
                     }
                   })}
+                  onBlur={() => {
+                    void publishSingleParameterCommand(`hum_min=${settings.alertThresholds.humidity.min}`);
+                  }}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -329,6 +398,9 @@ export function SystemConfig() {
                       humidity: { ...settings.alertThresholds.humidity, max: Number(e.target.value) }
                     }
                   })}
+                  onBlur={() => {
+                    void publishSingleParameterCommand(`hum_max=${settings.alertThresholds.humidity.max}`);
+                  }}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -378,6 +450,9 @@ export function SystemConfig() {
                       co2: { ...settings.alertThresholds.co2, warning: Number(e.target.value) }
                     }
                   })}
+                  onBlur={() => {
+                    void publishSingleParameterCommand(`air_min=${settings.alertThresholds.co2.warning}`);
+                  }}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -395,6 +470,9 @@ export function SystemConfig() {
                       co2: { ...settings.alertThresholds.co2, critical: Number(e.target.value) }
                     }
                   })}
+                  onBlur={() => {
+                    void publishSingleParameterCommand(`air_max=${settings.alertThresholds.co2.critical}`);
+                  }}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -625,11 +703,66 @@ export function SystemConfig() {
                     ...settings,
                     system: { ...settings.system, dataUpdateInterval: Number(e.target.value) }
                   })}
+                  onBlur={() => {
+                    const intervalMs = Math.round(settings.system.dataUpdateInterval * 1000);
+                    void publishSingleParameterCommand(`interval=${intervalMs}`);
+                  }}
                   className="w-full md:w-64 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   min="5"
                   max="60"
                 />
               </div>
+            </div>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-lg p-6">
+            <h3 className="font-semibold text-slate-900 mb-2">MQTT Command Bridge</h3>
+            <p className="text-sm text-slate-600 mb-4">
+              Publish control commands for the external gateway computer that connects directly to devices.
+            </p>
+            <p className="text-xs text-slate-500 mb-4">
+              Supported formats: mode=auto, mode=manual, exhaust=on/off, cooling=on/off, alarm=on/off,
+              light=on/off, interval=&lt;ms&gt;, temp_min/max, hum_min/max, light_min/max, air_min/max, show, reset.
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  MQTT Topic
+                </label>
+                <input
+                  type="text"
+                  value={commandTopic}
+                  onChange={(e) => setCommandTopic(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="esp32SLG4/commands"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Command Payload
+                </label>
+                <input
+                  type="text"
+                  value={commandPayload}
+                  onChange={(e) => setCommandPayload(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder='off or {"command":"off"}'
+                />
+              </div>
+            </div>
+
+            <div className="mt-4 flex items-center gap-3">
+              <button
+                onClick={handleSendGatewayCommand}
+                disabled={commandStatus === 'sending'}
+                className="px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors disabled:opacity-50"
+              >
+                {commandStatus === 'sending' ? 'Sending...' : 'Send Command'}
+              </button>
+              {commandStatus === 'success' && <span className="text-sm text-green-700">{commandFeedback}</span>}
+              {commandStatus === 'error' && <span className="text-sm text-red-700">{commandFeedback}</span>}
             </div>
           </div>
         </div>

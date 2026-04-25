@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { defaultThresholds, ThresholdConfig as ThresholdConfigType } from '../data/labData';
+import { useDataLog } from '../contexts/DataLogContext';
 import { useAppData } from '../contexts/AppDataContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -12,9 +13,86 @@ import { Badge } from './ui/badge';
 import { Save, AlertTriangle, Thermometer, Droplets, Wind, Lightbulb } from 'lucide-react';
 import { toast } from 'sonner';
 
+type ThresholdSection = keyof Omit<ThresholdConfigType, 'roomId'>;
+const thresholdSections: ThresholdSection[] = ['temperature', 'humidity', 'co2Level', 'lightLevel'];
+
+const thresholdSectionLabels: Record<ThresholdSection, string> = {
+  temperature: 'Temperature',
+  humidity: 'Humidity',
+  co2Level: 'CO₂ Level',
+  lightLevel: 'Light Level',
+};
+
+const thresholdFieldLabels: Record<string, string> = {
+  min: 'minimum',
+  max: 'maximum',
+  warningMin: 'warning minimum',
+  warningMax: 'warning maximum',
+};
+
+const readStoredThresholds = (): Record<string, ThresholdConfigType> => {
+  const saved = localStorage.getItem('lab_thresholds');
+  if (!saved) return defaultThresholds;
+
+  try {
+    return JSON.parse(saved) as Record<string, ThresholdConfigType>;
+  } catch {
+    return defaultThresholds;
+  }
+};
+
+const buildThresholdHistoryEntries = (
+  roomId: string,
+  previousConfig: ThresholdConfigType,
+  nextConfig: ThresholdConfigType,
+  roomName: string,
+  actorName: string,
+  actionLabel: 'updated' | 'reset',
+) => {
+  const entries: Array<{
+    roomId: string;
+    roomName: string;
+    labId: string;
+    changeType: 'threshold';
+    field: string;
+    oldValue: number;
+    newValue: number;
+    user: string;
+    description: string;
+  }> = [];
+
+  thresholdSections.forEach((section) => {
+    const previousSection = previousConfig[section];
+    const nextSection = nextConfig[section];
+
+    Object.entries(nextSection).forEach(([field, nextValue]) => {
+      const previousValue = previousSection[field as keyof typeof previousSection];
+      if (previousValue === nextValue) return;
+
+      const sectionLabel = thresholdSectionLabels[section];
+      const fieldLabel = thresholdFieldLabels[field] ?? field;
+
+      entries.push({
+        roomId,
+        roomName,
+        labId: roomId,
+        changeType: 'threshold',
+        field: `${sectionLabel} ${fieldLabel}`,
+        oldValue: Number(previousValue),
+        newValue: Number(nextValue),
+        user: actorName,
+        description: `${sectionLabel} ${fieldLabel} ${actionLabel} from ${previousValue} to ${nextValue}`,
+      });
+    });
+  });
+
+  return entries;
+};
+
 // UC1 - Threshold Configuration
 export function ThresholdConfig() {
   const { user, canAccessLab } = useAuth();
+  const { addLog } = useDataLog();
   const { labs } = useAppData();
   const [selectedRoom, setSelectedRoom] = useState<string>(labs[0]?.id ?? 'lab-01');
   const [thresholds, setThresholds] = useState<Record<string, ThresholdConfigType>>(defaultThresholds);
@@ -33,15 +111,7 @@ export function ThresholdConfig() {
 
   useEffect(() => {
     // Load saved thresholds from localStorage
-    const saved = localStorage.getItem(THRESHOLDS_KEY);
-    let loadedThresholds = defaultThresholds;
-    if (saved) {
-      try {
-        loadedThresholds = JSON.parse(saved);
-      } catch (error) {
-        console.error('Failed to load thresholds:', error);
-      }
-    }
+    let loadedThresholds = readStoredThresholds();
 
     const trackerRaw = localStorage.getItem(INSTRUCTOR_TEMP_OVERRIDE_KEY);
     let nextTracker: Record<string, string> = {};
@@ -125,6 +195,21 @@ export function ThresholdConfig() {
   };
 
   const saveThresholds = () => {
+    const previousThresholds = readStoredThresholds();
+    const previousRoomThreshold = previousThresholds[selectedRoom] ?? thresholds[selectedRoom];
+    const nextRoomThreshold = thresholds[selectedRoom];
+
+    if (previousRoomThreshold && nextRoomThreshold) {
+      buildThresholdHistoryEntries(
+        selectedRoom,
+        previousRoomThreshold,
+        nextRoomThreshold,
+        currentRoom?.name ?? selectedRoom,
+        user?.name ?? 'System',
+        'updated',
+      ).forEach((entry) => addLog(entry));
+    }
+
     localStorage.setItem(THRESHOLDS_KEY, JSON.stringify(thresholds));
 
     if (isInstructor && !isAdmin) {
@@ -145,6 +230,22 @@ export function ThresholdConfig() {
   };
 
   const resetToDefaults = () => {
+    const previousThresholds = readStoredThresholds();
+
+    Object.entries(defaultThresholds).forEach(([roomId, nextThreshold]) => {
+      const previousThreshold = previousThresholds[roomId];
+      if (!previousThreshold) return;
+
+      buildThresholdHistoryEntries(
+        roomId,
+        previousThreshold,
+        nextThreshold,
+        labs.find((room) => room.id === roomId)?.name ?? roomId,
+        user?.name ?? 'System',
+        'reset',
+      ).forEach((entry) => addLog(entry));
+    });
+
     setThresholds(defaultThresholds);
     localStorage.setItem(THRESHOLDS_KEY, JSON.stringify(defaultThresholds));
     setInstructorTempOverrideTracker({});

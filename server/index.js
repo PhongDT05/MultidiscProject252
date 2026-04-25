@@ -5,6 +5,18 @@ import { mapLabRow, mapUserRow, roleCodeFromUi } from './mappers.js';
 
 const app = express();
 const PORT = Number(process.env.API_PORT || 4000);
+const mqttBrokerUrl =
+  process.env.API_MQTT_BROKER_URL ||
+  process.env.MQTT_BROKER_URL ||
+  '';
+const mqttCommandTopic =
+  process.env.API_MQTT_COMMAND_TOPIC ||
+  'esp32SLG4/commands';
+const mqttClientId =
+  process.env.API_MQTT_CLIENT_ID ||
+  `smartlab-api-${Math.random().toString(16).slice(2, 10)}`;
+
+let mqttClientPromise = null;
 
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '1mb' }));
@@ -13,6 +25,99 @@ const toFiniteNumberOrNull = (value) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 };
+
+const createCommandEnvelope = (command, metadata) => {
+  const envelope = {
+    id: `cmd-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+    command,
+    issuedAt: new Date().toISOString(),
+    source: 'smartlab-dashboard',
+  };
+
+  if (metadata && typeof metadata === 'object' && !Array.isArray(metadata)) {
+    envelope.metadata = metadata;
+  }
+
+  return envelope;
+};
+
+async function getMqttClient() {
+  if (!mqttBrokerUrl) {
+    throw new Error('API_MQTT_BROKER_URL is missing. MQTT command publishing is not configured.');
+  }
+
+  if (mqttClientPromise) {
+    return mqttClientPromise;
+  }
+
+  mqttClientPromise = import('mqtt')
+    .then((mqttModule) => {
+      const connect =
+        typeof mqttModule.connect === 'function'
+          ? mqttModule.connect
+          : (mqttModule.default && typeof mqttModule.default.connect === 'function'
+              ? mqttModule.default.connect
+              : null);
+
+      if (!connect) {
+        throw new Error('Failed to initialize MQTT client: mqtt.connect export not found.');
+      }
+
+      return new Promise((resolve, reject) => {
+        const client = connect(mqttBrokerUrl, {
+          clientId: mqttClientId,
+          username: process.env.API_MQTT_USERNAME,
+          password: process.env.API_MQTT_PASSWORD,
+          reconnectPeriod: 3000,
+          connectTimeout: 10000,
+          clean: true,
+        });
+
+        const handleConnect = () => {
+          client.off('error', handleInitialError);
+          resolve(client);
+        };
+
+        const handleInitialError = (error) => {
+          client.off('connect', handleConnect);
+          mqttClientPromise = null;
+          try {
+            client.end(true);
+          } catch {
+            // no-op
+          }
+          reject(error instanceof Error ? error : new Error('MQTT connection failed.'));
+        };
+
+        client.once('connect', handleConnect);
+        client.once('error', handleInitialError);
+
+        client.on('close', () => {
+          // Allow lazy reconnect on next publish if client is permanently closed.
+          mqttClientPromise = null;
+        });
+      });
+    })
+    .catch((error) => {
+      mqttClientPromise = null;
+      throw error;
+    });
+
+  return mqttClientPromise;
+}
+
+async function publishMqttCommand(topic, payload) {
+  const client = await getMqttClient();
+
+  await new Promise((resolve, reject) => {
+    client.publish(topic, payload, { qos: 1, retain: false }, (error) => {
+      if (error) {
+        return reject(error);
+      }
+      resolve();
+    });
+  });
+}
 
 async function assertLabsAreAvailableForInstructor(requestFactory, labs, excludeUserId = null) {
   for (const rawLabCode of labs) {
@@ -45,6 +150,35 @@ app.get('/api/health', async (_req, res) => {
     res.json({ ok: true });
   } catch (error) {
     res.status(500).json({ ok: false, error: error instanceof Error ? error.message : 'unknown' });
+  }
+});
+
+app.post('/api/mqtt/commands', async (req, res) => {
+  const command = String(req.body?.command || '').trim();
+  const topic = String(req.body?.topic || mqttCommandTopic).trim();
+  const metadata = req.body?.metadata;
+
+  if (!command) {
+    return res.status(400).json({ error: 'command is required.' });
+  }
+
+  if (!topic) {
+    return res.status(400).json({ error: 'topic is required.' });
+  }
+
+  if (command.length > 1000) {
+    return res.status(400).json({ error: 'command is too long (max 1000 chars).' });
+  }
+
+  const envelope = createCommandEnvelope(command, metadata);
+
+  try {
+    await publishMqttCommand(topic, JSON.stringify(envelope));
+    return res.status(202).json({ ok: true, topic, envelope });
+  } catch (error) {
+    return res.status(502).json({
+      error: error instanceof Error ? error.message : 'Failed to publish MQTT command.',
+    });
   }
 });
 
@@ -103,10 +237,6 @@ app.post('/api/users', async (req, res) => {
 
   try {
     await executeInTransaction(async (requestFactory) => {
-      if (roleCode === 'INSTRUCTOR') {
-        await assertLabsAreAvailableForInstructor(requestFactory, labs);
-      }
-
       const request = requestFactory();
       request.input('username', sql.VarChar(50), String(body.username || '').toLowerCase());
       request.input('email', sql.VarChar(255), String(body.email || '').toLowerCase());
@@ -168,10 +298,6 @@ app.patch('/api/users/:id', async (req, res) => {
       const targetLabs = Array.isArray(body.assignedLabs)
         ? body.assignedLabs
         : (currentUser.AssignedLabs ? String(currentUser.AssignedLabs).split(',').filter(Boolean) : []);
-
-      if (targetRoleCode === 'INSTRUCTOR') {
-        await assertLabsAreAvailableForInstructor(requestFactory, targetLabs, userId);
-      }
 
       const request = requestFactory();
       request.input('userId', sql.BigInt, userId);
@@ -661,6 +787,36 @@ app.post('/api/recommendations', async (req, res) => {
   );
 
   res.status(201).json({ ok: true, id: recommendationCode });
+});
+
+app.patch('/api/recommendations/:recommendationId/status', async (req, res) => {
+  const recommendationId = String(req.params.recommendationId || '').trim();
+  const status = String(req.body?.status || '').trim().toLowerCase();
+
+  if (!recommendationId) {
+    return res.status(400).json({ error: 'recommendationId is required.' });
+  }
+
+  if (!['reviewed', 'dismissed'].includes(status)) {
+    return res.status(400).json({ error: 'status must be reviewed or dismissed.' });
+  }
+
+  const result = await query(
+    `UPDATE smartlab.LabRecommendation
+     SET [Status] = @status
+     WHERE RecommendationCode = @recommendationId;
+
+     SELECT RecommendationCode
+     FROM smartlab.LabRecommendation
+     WHERE RecommendationCode = @recommendationId`,
+    { recommendationId, status },
+  );
+
+  if (!result[0]) {
+    return res.status(404).json({ error: 'Recommendation not found.' });
+  }
+
+  res.json({ ok: true, id: recommendationId, status });
 });
 
 app.use((error, _req, res, _next) => {

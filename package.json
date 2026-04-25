@@ -6,7 +6,8 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite",
-    "dev:api": "node server/index.js"
+    "dev:api": "node server/index.js",
+    "gateway:commands": "node tools/mqtt-command-gateway.js"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",

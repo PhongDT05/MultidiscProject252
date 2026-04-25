@@ -14,6 +14,11 @@
 const char* ssid = "Redmi Note 13 Pro";     
 const char* password = "12345678";  
 const char* mqtt_server = "broker.hivemq.com";
+const char* TOPIC_LEGACY_COMMANDS = "esp32SLG4/commands";
+const char* TOPIC_LAB_A_COMMANDS = "esp32SLG4/labA/commands";
+const char* TOPIC_LAB_B_COMMANDS = "esp32SLG4/labB/commands";
+const char* TOPIC_LAB_A_PREFIX = "esp32SLG4/labA";
+const char* TOPIC_LAB_B_PREFIX = "esp32SLG4/labB";
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -51,6 +56,23 @@ const int RELAY_ON = LOW;
 const int RELAY_OFF = HIGH;
 int presenceCounter = 0;
 
+// Light control levels
+const int LIGHT_LEVEL_OFF = 0;
+const int LIGHT_LEVEL_WEAK = 1;
+const int LIGHT_LEVEL_STRONG = 2;
+
+// Set to true only when LIGHT_SYSTEM_PIN is connected to a dimmable driver (PWM-capable),
+// not a mechanical relay.
+const bool LIGHT_SUPPORTS_PWM = false;
+const int LIGHT_PWM_CHANNEL = 0;
+const int LIGHT_PWM_FREQ = 5000;
+const int LIGHT_PWM_RESOLUTION = 8;
+const int LIGHT_PWM_WEAK_DUTY = 110;
+const int LIGHT_PWM_STRONG_DUTY = 255;
+
+bool lightPwmReady = false;
+int lightLevel = LIGHT_LEVEL_OFF;
+
 // Global presence and mode state
 bool isPresent = false;
 bool isAutoMode = true;
@@ -86,6 +108,37 @@ void loadThresholds() {
   EEPROM.get(0,th);
   Serial.println("Loaded");
 }
+
+void publishLabTopic(const char* labPrefix, const char* metric, const String& value) {
+  String topic = String(labPrefix) + "/" + metric;
+  client.publish(topic.c_str(), value.c_str());
+}
+
+void publishLabTopic(const char* labPrefix, const char* metric, const char* value) {
+  String topic = String(labPrefix) + "/" + metric;
+  client.publish(topic.c_str(), value);
+}
+
+const char* lightLevelLabel(int level) {
+  if (level == LIGHT_LEVEL_WEAK) return "weak";
+  if (level == LIGHT_LEVEL_STRONG) return "strong";
+  return "off";
+}
+
+void applyLightLevel(int level) {
+  lightLevel = level;
+
+  if (LIGHT_SUPPORTS_PWM && lightPwmReady) {
+    int duty = 0;
+    if (level == LIGHT_LEVEL_WEAK) duty = LIGHT_PWM_WEAK_DUTY;
+    if (level == LIGHT_LEVEL_STRONG) duty = LIGHT_PWM_STRONG_DUTY;
+    ledcWrite(LIGHT_PWM_CHANNEL, duty);
+    return;
+  }
+
+  // Fallback for relay-controlled lights (binary ON/OFF).
+  digitalWrite(LIGHT_SYSTEM_PIN, level == LIGHT_LEVEL_OFF ? RELAY_OFF : RELAY_ON);
+}
 // Timing
 unsigned long lastMsg = 0;
 
@@ -107,7 +160,9 @@ void reconnect(){
     Serial.print("Attempting MQTT connection...");
     if (client.connect("ESP32ClientSmartLab")){
       Serial.println("connected");
-      client.subscribe("esp32SLG4/commands");   
+      client.subscribe(TOPIC_LEGACY_COMMANDS);
+      client.subscribe(TOPIC_LAB_A_COMMANDS);
+      client.subscribe(TOPIC_LAB_B_COMMANDS);
     } 
     else{
       Serial.print("failed");
@@ -123,11 +178,12 @@ void printHelp(){
   Serial.println("mode=auto, mode=manual : Switch control modes");
   Serial.println("exhaust=on, exhaust=off : Manual Exhaust fan control");
   Serial.println("cooling=on, cooling=off : Manual Cooling fan control");
-  Serial.println("light=on, light=off : Manual Light control");
+  Serial.println("light=off, light=weak, light=strong : Manual Light strength control");
   Serial.println("interval=<ms> : Set delay time");
   Serial.println("temp_min=<v>, temp_max=<v> : Set Min/Max temperature");
-  Serial.println("hum_min=<v>, hum_max=<v> : Set Min/Max humanity");
-  Serial.println("light_min=<v>, light_max=<v> : Set Min/Max light");
+  Serial.println("hum_min=<v>, hum_max=<v> : Set Min/Max humidity");
+  Serial.println("light_min=<v>, light_max=<v> : Auto light thresholds");
+  Serial.println("  lux < light_min -> strong, light_min <= lux < light_max -> weak, lux >= light_max -> off");
   Serial.println("air_min=<v>, air_max=<v> : Set Min/Max air");
   Serial.println("show: display all thresholds");
   Serial.println("reset: reset to default values");
@@ -139,10 +195,15 @@ void handleCommand(String cmd){
   bool changed = false;
   if(cmd.equalsIgnoreCase("show")){
       Serial.printf("\nMode: %s\n", isAutoMode ? "AUTO" : "MANUAL");
+      Serial.printf("Light Level: %s\n", lightLevelLabel(lightLevel));
       Serial.printf("\nInterval: %lu ms\n",th.msgInterval);
       Serial.printf("Temp: %.2f - %.2f C\n",th.tempMin,th.tempMax);
       Serial.printf("Hum: %.2f - %.2f %%\n",th.humMin,th.humMax);
       Serial.printf("Light: %.2f - %.2f lx\n",th.lightMin,th.lightMax);
+      Serial.println("Light auto thresholds:");
+      Serial.printf("  strong when lux < %.2f\n", th.lightMin);
+      Serial.printf("  weak when %.2f <= lux < %.2f\n", th.lightMin, th.lightMax);
+      Serial.printf("  off when lux >= %.2f\n", th.lightMax);
       Serial.printf("Air: %d - %d\n",th.airMin,th.airMax);
       Serial.printf("\nCounter: %d\n",th.counter );
     }
@@ -184,12 +245,22 @@ void handleCommand(String cmd){
   }
   else if(cmd.equalsIgnoreCase("light=on")){ 
     isAutoMode = false; 
-    digitalWrite(LIGHT_SYSTEM_PIN, RELAY_ON); 
+    applyLightLevel(LIGHT_LEVEL_STRONG);
     changed = true; 
   }
   else if(cmd.equalsIgnoreCase("light=off")){ 
     isAutoMode = false; 
-    digitalWrite(LIGHT_SYSTEM_PIN, RELAY_OFF); 
+    applyLightLevel(LIGHT_LEVEL_OFF);
+    changed = true; 
+  }
+  else if(cmd.equalsIgnoreCase("light=weak")){
+    isAutoMode = false;
+    applyLightLevel(LIGHT_LEVEL_WEAK);
+    changed = true;
+  }
+  else if(cmd.equalsIgnoreCase("light=strong")){
+    isAutoMode = false;
+    applyLightLevel(LIGHT_LEVEL_STRONG);
     changed = true; 
   }
   //threshold
@@ -244,6 +315,9 @@ void handleCommand(String cmd){
     Serial.println(msg);
     client.publish("esp32SLG4/alerts",msg.c_str());
     client.publish("esp32SLG4/mode", isAutoMode ? "auto" : "manual");
+    client.publish("esp32SLG4/light_mode", lightLevelLabel(lightLevel));
+    publishLabTopic(TOPIC_LAB_A_PREFIX, "mode", isAutoMode ? "auto" : "manual");
+    publishLabTopic(TOPIC_LAB_A_PREFIX, "light_mode", lightLevelLabel(lightLevel));
   }
 }
 //float
@@ -259,6 +333,13 @@ void handleCommand(String cmd){
                      // esp32SLG4/alertsa - air
 // Commands	            esp32SLG4/commands      
 // Sensor Health Status esp32SLG4/status/oled, esp32SLG4/status/dht, esp32SLG4/status/bh1750, esp32SLG4/status/radar, esp32SLG4/status/mq135
+// Split lab namespaces:
+// Lab A telemetry       esp32SLG4/labA/temperature, humidity, light, mode, light_mode
+// Lab B telemetry       esp32SLG4/labB/air, presence, counter
+// Lab A alerts          esp32SLG4/labA/alertst, alertsh, alertsl
+// Lab B alerts          esp32SLG4/labB/alertsa
+// Lab A commands        esp32SLG4/labA/commands
+// Lab B commands        esp32SLG4/labB/commands
 
 void callback(char* topic,byte* message,unsigned int length){
   String cmd = "";
@@ -372,10 +453,16 @@ void setup() {
   pinMode(COOLING_FAN_PIN, OUTPUT);
   pinMode(LIGHT_SYSTEM_PIN, OUTPUT);
 
+  if (LIGHT_SUPPORTS_PWM) {
+    ledcSetup(LIGHT_PWM_CHANNEL, LIGHT_PWM_FREQ, LIGHT_PWM_RESOLUTION);
+    ledcAttachPin(LIGHT_SYSTEM_PIN, LIGHT_PWM_CHANNEL);
+    lightPwmReady = true;
+  }
+
   // Set default state to OFF
   digitalWrite(EXHAUST_FAN_PIN, RELAY_OFF);
   digitalWrite(COOLING_FAN_PIN, RELAY_OFF);
-  digitalWrite(LIGHT_SYSTEM_PIN, RELAY_OFF);
+  applyLightLevel(LIGHT_LEVEL_OFF);
   Serial.println("Relays configured and set to OFF.");
 
   // Update screen to show success
@@ -466,7 +553,18 @@ void loop() {
     client.publish("esp32SLG4/light", String(lux).c_str());
     client.publish("esp32SLG4/air", String(airValue).c_str());
     client.publish("esp32SLG4/mode", isAutoMode ? "auto" : "manual");
+    client.publish("esp32SLG4/light_mode", lightLevelLabel(lightLevel));
     client.publish("esp32SLG4/presence", isPresent ? "Use" : "Empty");
+
+    publishLabTopic(TOPIC_LAB_A_PREFIX, "temperature", String(temperature));
+    publishLabTopic(TOPIC_LAB_A_PREFIX, "humidity", String(humidity));
+    publishLabTopic(TOPIC_LAB_A_PREFIX, "light", String(lux));
+    publishLabTopic(TOPIC_LAB_A_PREFIX, "mode", isAutoMode ? "auto" : "manual");
+    publishLabTopic(TOPIC_LAB_A_PREFIX, "light_mode", lightLevelLabel(lightLevel));
+
+    publishLabTopic(TOPIC_LAB_B_PREFIX, "air", String(airValue));
+    publishLabTopic(TOPIC_LAB_B_PREFIX, "presence", isPresent ? "Use" : "Empty");
+    publishLabTopic(TOPIC_LAB_B_PREFIX, "counter", String(presenceCounter));
 
     // Publish Sensor Health Status
     client.publish("esp32SLG4/status/oled", oledConnected ? "Connected" : "Error");
@@ -474,6 +572,12 @@ void loop() {
     client.publish("esp32SLG4/status/bh1750", bh1750Connected ? "Connected" : "Error");
     client.publish("esp32SLG4/status/radar", radarConnected ? "Connected" : "Error");
     client.publish("esp32SLG4/status/mq135", mq135Connected ? "Connected" : "Error");
+
+    publishLabTopic(TOPIC_LAB_A_PREFIX, "status/oled", oledConnected ? "Connected" : "Error");
+    publishLabTopic(TOPIC_LAB_A_PREFIX, "status/dht", dhtConnected ? "Connected" : "Error");
+    publishLabTopic(TOPIC_LAB_A_PREFIX, "status/bh1750", bh1750Connected ? "Connected" : "Error");
+    publishLabTopic(TOPIC_LAB_B_PREFIX, "status/radar", radarConnected ? "Connected" : "Error");
+    publishLabTopic(TOPIC_LAB_B_PREFIX, "status/mq135", mq135Connected ? "Connected" : "Error");
 
     // AUTOMATION & RELAY CONTROL LOGIC
     if (isAutoMode) {
@@ -491,10 +595,19 @@ void loop() {
       digitalWrite(COOLING_FAN_PIN, shouldCool ? RELAY_ON : RELAY_OFF);
 
       // 3. Lighting Control (Requires Presence)
-      // Hysteresis: Turns on < lightMin, stays on until it gets 20 lux brighter than lightMin
-      bool isLightOn = (digitalRead(LIGHT_SYSTEM_PIN) == RELAY_ON);
-      bool shouldLight = isPresent && ((lux < th.lightMin) || (isLightOn && lux < (th.lightMin + 20.0)));
-      digitalWrite(LIGHT_SYSTEM_PIN, shouldLight ? RELAY_ON : RELAY_OFF);
+      // Threshold-based multi-level light control:
+      // - lux < lightMin: strong
+      // - lightMin <= lux < lightMax: weak
+      // - lux >= lightMax or no presence: off
+      int autoLightLevel = LIGHT_LEVEL_OFF;
+      if (isPresent) {
+        if (lux < th.lightMin) {
+          autoLightLevel = LIGHT_LEVEL_STRONG;
+        } else if (lux < th.lightMax) {
+          autoLightLevel = LIGHT_LEVEL_WEAK;
+        }
+      }
+      applyLightLevel(autoLightLevel);
       
     }
 
@@ -505,24 +618,28 @@ void loop() {
       Serial.println(alert);
       display.print(alert);
       client.publish("esp32SLG4/alertst",alert);
+      publishLabTopic(TOPIC_LAB_A_PREFIX, "alertst", alert);
     }
     else if(th.humMin>=th.humMax){
       sprintf(alert,"Set Sai");
       Serial.println(alert);
       display.print(alert);
       client.publish("esp32SLG4/alertsh",alert);
+      publishLabTopic(TOPIC_LAB_A_PREFIX, "alertsh", alert);
     }
     else if(th.lightMin>=th.lightMax){
       sprintf(alert,"Set Sai");
       Serial.println(alert);
       display.print(alert);
       client.publish("esp32SLG4/alertsl",alert);
+      publishLabTopic(TOPIC_LAB_A_PREFIX, "alertsl", alert);
     }
     else if(th.airMin>=th.airMax){
       sprintf(alert,"Set Sai");
       Serial.println(alert);
       display.print(alert);
       client.publish("esp32SLG4/alertsa",alert);
+      publishLabTopic(TOPIC_LAB_B_PREFIX, "alertsa", alert);
     }
     else{
     if(temperature < th.tempMin){
@@ -530,6 +647,7 @@ void loop() {
       Serial.println(alert);
       display.print(alert);
       client.publish("esp32SLG4/alertst",alert);
+      publishLabTopic(TOPIC_LAB_A_PREFIX, "alertst", alert);
     }
 
     if(temperature > th.tempMax){
@@ -537,6 +655,7 @@ void loop() {
       Serial.println(alert);
       display.print(alert);
       client.publish("esp32SLG4/alertst",alert);
+      publishLabTopic(TOPIC_LAB_A_PREFIX, "alertst", alert);
     }
 
     if(humidity < th.humMin){
@@ -544,6 +663,7 @@ void loop() {
      Serial.println(alert);
      display.print(alert);
      client.publish("esp32SLG4/alertsh",alert);
+    publishLabTopic(TOPIC_LAB_A_PREFIX, "alertsh", alert);
     }
 
     if(humidity > th.humMax){
@@ -551,6 +671,7 @@ void loop() {
      Serial.println(alert);
      display.print(alert);
      client.publish("esp32SLG4/alertsh",alert);
+    publishLabTopic(TOPIC_LAB_A_PREFIX, "alertsh", alert);
     }
 
     if(lux < th.lightMin){
@@ -558,12 +679,14 @@ void loop() {
       Serial.println(alert);
       display.print(alert);
       client.publish("esp32SLG4/alertsl",alert);
+      publishLabTopic(TOPIC_LAB_A_PREFIX, "alertsl", alert);
     }
     if(lux > th.lightMax){
       sprintf(alert,"Too Bright");
       Serial.println(alert);
       display.print(alert);
       client.publish("esp32SLG4/alertsl",alert);
+      publishLabTopic(TOPIC_LAB_A_PREFIX, "alertsl", alert);
     }
 
     if(airValue < th.airMin){
@@ -571,12 +694,14 @@ void loop() {
       Serial.println(alert);
       display.print(alert);
       client.publish("esp32SLG4/alertsa",alert);
+      publishLabTopic(TOPIC_LAB_B_PREFIX, "alertsa", alert);
     }
     if(airValue > th.airMax){
       sprintf(alert,"Too Poor");
       Serial.println(alert);
       display.print(alert);
       client.publish("esp32SLG4/alertsa",alert);
+      publishLabTopic(TOPIC_LAB_B_PREFIX, "alertsa", alert);
     }
     }
     display.display();

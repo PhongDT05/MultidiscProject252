@@ -71,6 +71,30 @@
   - Browser clients require MQTT over WebSocket.
   - When `VITE_ENABLE_MQTT=true`, the demo data simulator is disabled automatically to prevent overwriting live telemetry.
 
+    ## MQTT Command Bridge (Dashboard -> Gateway PC)
+
+    The dashboard can publish control commands to MQTT through the backend API.
+
+    Backend environment variables:
+
+    - `API_MQTT_BROKER_URL` (required for command publishing)
+    - `API_MQTT_USERNAME` (optional)
+    - `API_MQTT_PASSWORD` (optional)
+    - `API_MQTT_COMMAND_TOPIC` (optional, default: `esp32SLG4/commands`)
+    - `API_MQTT_CLIENT_ID` (optional)
+
+    Gateway PC setup:
+
+    1. Copy this repo (or only `tools/mqtt-command-gateway.js`) to the gateway computer.
+    2. Set gateway environment variables as needed:
+      - `GATEWAY_MQTT_BROKER_URL` (default: `mqtt://localhost:1883`)
+      - `GATEWAY_MQTT_SUBSCRIBE_TOPIC` (default: `esp32SLG4/commands`)
+      - `GATEWAY_MQTT_ACK_TOPIC` (default: `esp32SLG4/ack`)
+      - `GATEWAY_MQTT_USERNAME` / `GATEWAY_MQTT_PASSWORD` (optional)
+    3. Run `npm run gateway:commands`.
+
+    The gateway script is at `tools/mqtt-command-gateway.js`. Replace `executeDeviceCommand` with the real local device integration logic.
+
   ## Documentation
 
   - Quick start and demo accounts: [QUICK_START_GUIDE.md](QUICK_START_GUIDE.md)

@@ -9,6 +9,7 @@ export type ChangeType =
   | 'equipment' 
   | 'alert' 
   | 'status'
+  | 'threshold'
   | 'system';
 
 export interface DataChangeLog {
