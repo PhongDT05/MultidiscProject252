@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { labRooms, type LabRoom, type Alert, type IoTDevice, type Equipment, type Actuator } from '../data/labData';
 import { appApi } from '../services/appApi';
+import { publishMqttCommand } from '../services/mqttTelemetry';
 import { useDataLog } from './DataLogContext';
 import {
   mqttTelemetryEnabled,
@@ -998,6 +999,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   };
 
   const toggleEquipmentMode = (roomId: string, equipmentId: string) => {
+    // Determine new mode so we can publish a command
+    const room = labs.find((r) => r.id === roomId);
+    const equipment = room?.equipment.find((eq) => eq.id === equipmentId);
+    const newMode = equipment ? (equipment.mode === 'auto' ? 'manual' : 'auto') : undefined;
+
     updateRoom(roomId, (room) => ({
       ...room,
       equipment: room.equipment.map((eq) =>
@@ -1006,6 +1012,20 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           : eq,
       ),
     }));
+
+    // Publish MQTT command to request mode change on the device (fire-and-forget)
+    if (newMode) {
+      const payload = JSON.stringify({
+        type: 'set_mode',
+        equipmentId,
+        mode: newMode,
+        issuedAt: new Date().toISOString(),
+      });
+      const topic = `devices/${equipmentId}/commands`;
+      void publishMqttCommand(topic, payload).catch(() => {
+        // ignore errors here
+      });
+    }
   };
 
   const acknowledgeAlert = (alertId: string, actorName: string): boolean => {

@@ -22,7 +22,7 @@ type DeviceType = 'iot-sensor' | 'iot-gateway' | 'iot-actuator' | 'equipment';
 
 export function DeviceInsertion({ isOpen, onClose, roomId, onSuccess }: DeviceInsertionProps) {
   const { user } = useAuth();
-  const { addIoTDevice, addEquipment, addActuator } = useAppData();
+  const { labs, addIoTDevice, addEquipment, addActuator } = useAppData();
   
   const [activeTab, setActiveTab] = useState<'discover' | 'manual'>('discover');
   const [isScanning, setIsScanning] = useState(false);
@@ -95,6 +95,31 @@ export function DeviceInsertion({ isOpen, onClose, roomId, onSuccess }: DeviceIn
       return;
     }
 
+    // Get existing device names in the room
+    const currentRoom = labs.find(lab => lab.id === roomId);
+    const existingNames = currentRoom ? [
+      ...currentRoom.equipment.map(eq => eq.name.toLowerCase()),
+      ...currentRoom.iotDevices.map(iot => iot.name.toLowerCase()),
+      ...currentRoom.actuators.map(act => act.name.toLowerCase()),
+    ] : [];
+
+    // Check for duplicate names
+    const duplicates: string[] = [];
+    for (const index of selectedDevices) {
+      const device = discoveredDevices[index];
+      if (existingNames.includes(device.name.toLowerCase())) {
+        duplicates.push(device.name);
+      }
+    }
+
+    if (duplicates.length > 0) {
+      setSubmitMessage({ 
+        type: 'error', 
+        text: `The following device names already exist in this lab: ${duplicates.join(', ')}. Please rename them or deselect them.` 
+      });
+      return;
+    }
+
     setIsSubmitting(true);
     setSubmitMessage(null);
 
@@ -147,6 +172,28 @@ export function DeviceInsertion({ isOpen, onClose, roomId, onSuccess }: DeviceIn
     if (!manualFormData.location.trim()) {
       setSubmitMessage({ type: 'error', text: 'Device location is required' });
       return;
+    }
+
+    // Check for duplicate device names
+    const currentRoom = labs.find(lab => lab.id === roomId);
+    if (currentRoom) {
+      const deviceNames = [
+        ...currentRoom.equipment.map(eq => eq.name),
+        ...currentRoom.iotDevices.map(iot => iot.name),
+        ...currentRoom.actuators.map(act => act.name),
+      ];
+      
+      const nameExists = deviceNames.some(name => 
+        name.toLowerCase() === manualFormData.name.trim().toLowerCase()
+      );
+      
+      if (nameExists) {
+        setSubmitMessage({ 
+          type: 'error', 
+          text: `A device with the name "${manualFormData.name}" already exists in this lab. Please use a different name.` 
+        });
+        return;
+      }
     }
 
     setIsSubmitting(true);

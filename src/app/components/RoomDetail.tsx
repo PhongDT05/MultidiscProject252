@@ -4,6 +4,7 @@ import { generateHistoricalData } from "../data/labData";
 import { useAuth } from "../contexts/AuthContext";
 import { useAppData } from "../contexts/AppDataContext";
 import { appApi } from "../services/appApi";
+import { publishMqttCommand } from '../services/mqttTelemetry';
 import { ChangeLog } from "./ChangeLog";
 import { DataSimulator } from "./DataSimulator";
 import { DeviceInsertion } from "./DeviceInsertion";
@@ -45,7 +46,7 @@ export function RoomDetail() {
   const { user, hasPermission, hasAnyPermission, canAccessLab } = useAuth();
   const { labs, toggleEquipmentMode, updateRoom } = useAppData();
   const [showDeviceInsertion, setShowDeviceInsertion] = useState(false);
-  const [recommendations, setRecommendations] = useState<Array<{
+  const [requests, setRequests] = useState<Array<{
     id: string;
     message: string;
     status: string;
@@ -53,17 +54,17 @@ export function RoomDetail() {
     studentName: string;
     instructorName: string;
   }>>([]);
-  const [newRecommendation, setNewRecommendation] = useState('');
-  const [submittingRecommendation, setSubmittingRecommendation] = useState(false);
-  const [recommendationError, setRecommendationError] = useState<string | null>(null);
+  const [newRequest, setNewRequest] = useState('');
+  const [submittingRequest, setSubmittingRequest] = useState(false);
+  const [requestError, setRequestError] = useState<string | null>(null);
   const room = labs.find((r) => r.id === roomId);
   
   // Check if user can control equipment (technician and above)
   const canControlEquipment = hasPermission('technician');
   const canViewLogsAndRuntime = hasAnyPermission(['technician', 'admin']);
-  const canRespondToRecommendations = Boolean(room && hasAnyPermission(['instructor', 'admin']) && canAccessLab(room.id));
+  const canRespondToRequests = Boolean(room && hasAnyPermission(['instructor', 'admin']) && canAccessLab(room.id));
   const canAddDevices = hasPermission('technician') && canAccessLab(room?.id || '');
-  const canSendRecommendation = Boolean(user && user.role === 'student' && room && canAccessLab(room.id));
+  const canSendRequest = Boolean(user && user.role === 'student' && room && canAccessLab(room.id));
 
   const toggleEquipmentEnabled = (equipmentId: string) => {
     if (!room || !canControlEquipment) return;
@@ -84,6 +85,27 @@ export function RoomDetail() {
         };
       }),
     }));
+
+    // Publish a command to the device to change power/state (non-blocking)
+    try {
+      const lab = room;
+      const eq = lab.equipment.find((e) => e.id === equipmentId);
+      if (eq) {
+        const willEnable = eq.status === 'offline' || eq.status === 'maintenance';
+        const payload = JSON.stringify({
+          type: 'set_power',
+          equipmentId,
+          state: willEnable ? 'on' : 'off',
+          issuedAt: new Date().toISOString(),
+        });
+        const topic = `devices/${equipmentId}/commands`;
+        void publishMqttCommand(topic, payload).catch(() => {
+          // ignore failures
+        });
+      }
+    } catch (err) {
+      // swallow
+    }
   };
 
   const formatWorkedTime = (hours: number) => {
@@ -103,6 +125,7 @@ export function RoomDetail() {
 
     return `${minutes}m`;
   };
+
   
   useEffect(() => {
     let isMounted = true;
@@ -111,12 +134,12 @@ export function RoomDetail() {
     void appApi.getRecommendations(room.id)
       .then((items) => {
         if (isMounted) {
-          setRecommendations(items);
+          setRequests(items);
         }
       })
       .catch(() => {
         if (isMounted) {
-          setRecommendationError('Failed to load recommendations.');
+          setRequestError('Failed to load requests.');
         }
       });
 
@@ -125,33 +148,33 @@ export function RoomDetail() {
     };
   }, [room?.id]);
 
-  const submitRecommendation = async () => {
-    if (!room || !user || !newRecommendation.trim()) return;
-    setSubmittingRecommendation(true);
-    setRecommendationError(null);
+  const submitRequest = async () => {
+    if (!room || !user || !newRequest.trim()) return;
+    setSubmittingRequest(true);
+    setRequestError(null);
 
     try {
-      await appApi.sendRecommendation(room.id, user.id, newRecommendation.trim());
-      setNewRecommendation('');
+      await appApi.sendRecommendation(room.id, user.id, newRequest.trim());
+      setNewRequest('');
       const latest = await appApi.getRecommendations(room.id);
-      setRecommendations(latest);
+      setRequests(latest);
     } catch (error) {
-      setRecommendationError(error instanceof Error ? error.message : 'Unable to send recommendation.');
+      setRequestError(error instanceof Error ? error.message : 'Unable to send request.');
     } finally {
-      setSubmittingRecommendation(false);
+      setSubmittingRequest(false);
     }
   };
 
-  const respondToRecommendation = async (recommendationId: string, status: 'reviewed' | 'dismissed') => {
-    if (!room || !canRespondToRecommendations) return;
+  const respondToRequest = async (requestId: string, status: 'reviewed' | 'dismissed') => {
+    if (!room || !canRespondToRequests) return;
 
-    setRecommendationError(null);
+    setRequestError(null);
     try {
-      await appApi.updateRecommendationStatus(recommendationId, status);
+      await appApi.updateRecommendationStatus(requestId, status);
       const latest = await appApi.getRecommendations(room.id);
-      setRecommendations(latest);
+      setRequests(latest);
     } catch (error) {
-      setRecommendationError(error instanceof Error ? error.message : 'Unable to update recommendation status.');
+      setRequestError(error instanceof Error ? error.message : 'Unable to update request status.');
     }
   };
 
@@ -365,41 +388,41 @@ export function RoomDetail() {
       )}
 
       <div className="mb-8 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-        <h3 className="text-lg font-semibold text-slate-900 mb-3">Lab Recommendations</h3>
+        <h3 className="text-lg font-semibold text-slate-900 mb-3">Lab Requests</h3>
         <p className="text-sm text-slate-600 mb-4">
-          Students can submit recommendations to the instructor assigned to this lab.
+          Students can submit requests to the instructor assigned to this lab.
         </p>
 
-        {canSendRecommendation && (
+        {canSendRequest && (
           <div className="mb-5 space-y-3">
             <textarea
-              value={newRecommendation}
-              onChange={(event) => setNewRecommendation(event.target.value)}
+              value={newRequest}
+              onChange={(event) => setNewRequest(event.target.value)}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Write your recommendation for this lab..."
+              placeholder="Write your request for this lab..."
               rows={3}
             />
             <button
-              onClick={submitRecommendation}
-              disabled={submittingRecommendation || newRecommendation.trim().length === 0}
+              onClick={submitRequest}
+              disabled={submittingRequest || newRequest.trim().length === 0}
               className="inline-flex items-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {submittingRecommendation ? 'Sending...' : 'Send Recommendation'}
+              {submittingRequest ? 'Sending...' : 'Send Request'}
             </button>
           </div>
         )}
 
-        {recommendationError && (
+        {requestError && (
           <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-            {recommendationError}
+            {requestError}
           </div>
         )}
 
-        {recommendations.length === 0 ? (
-          <p className="text-sm text-slate-500">No recommendations submitted for this lab yet.</p>
+        {requests.length === 0 ? (
+          <p className="text-sm text-slate-500">No requests submitted for this lab yet.</p>
         ) : (
           <div className="space-y-3">
-            {recommendations.map((item) => (
+            {requests.map((item) => (
               <div key={item.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                 <div className="flex items-start justify-between gap-3">
                   <p className="text-sm text-slate-800">{item.message}</p>
@@ -410,16 +433,16 @@ export function RoomDetail() {
                 <p className="mt-2 text-xs text-slate-500">
                   From {item.studentName} to {item.instructorName} • {new Date(item.createdAt).toLocaleString()}
                 </p>
-                {canRespondToRecommendations && item.status === 'pending' && (
+                {canRespondToRequests && item.status === 'pending' && (
                   <div className="mt-3 flex flex-wrap gap-2">
                     <button
-                      onClick={() => respondToRecommendation(item.id, 'reviewed')}
+                      onClick={() => respondToRequest(item.id, 'reviewed')}
                       className="inline-flex items-center rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-emerald-700"
                     >
                       Acknowledge
                     </button>
                     <button
-                      onClick={() => respondToRecommendation(item.id, 'dismissed')}
+                      onClick={() => respondToRequest(item.id, 'dismissed')}
                       className="inline-flex items-center rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100"
                     >
                       Dismiss
@@ -429,7 +452,7 @@ export function RoomDetail() {
               </div>
             ))}
           </div>
-        )}
+        )}}
       </div>
 
       {/* Current Metrics */}

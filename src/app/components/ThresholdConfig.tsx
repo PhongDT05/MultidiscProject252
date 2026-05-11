@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { defaultThresholds, ThresholdConfig as ThresholdConfigType } from '../data/labData';
 import { useDataLog } from '../contexts/DataLogContext';
+import { publishMqttCommand } from '../services/mqttTelemetry';
 import { useAppData } from '../contexts/AppDataContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -227,6 +228,40 @@ export function ThresholdConfig() {
         ? `Temporary settings for ${currentRoom?.name} are active until the end of today.`
         : `Settings for ${currentRoom?.name} have been updated successfully.`,
     });
+
+    // Publish threshold changes to hardware (non-blocking)
+    try {
+      const changes = buildThresholdHistoryEntries(
+        selectedRoom,
+        previousRoomThreshold,
+        nextRoomThreshold,
+        currentRoom?.name ?? selectedRoom,
+        user?.name ?? 'System',
+        'updated',
+      );
+
+      changes.forEach((entry) => {
+        // Construct a simple command payload describing the threshold change
+        const payload = JSON.stringify({
+          type: 'set_threshold',
+          roomId: entry.roomId,
+          parameter: entry.field,
+          value: entry.newValue,
+          updatedBy: entry.user,
+          timestamp: new Date().toISOString(),
+        });
+
+        // Topic per-room; backend will route to appropriate device(s)
+        const topic = `smartlab/${entry.roomId}/commands`;
+
+        // Fire-and-forget via MQTT
+        void publishMqttCommand(topic, payload).catch(() => {
+          // swallow errors; UI already informed user
+        });
+      });
+    } catch (err) {
+      // ignore failures to avoid blocking UI
+    }
   };
 
   const resetToDefaults = () => {
@@ -480,7 +515,7 @@ export function ThresholdConfig() {
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="co2-warn">Warning Maximum</Label>
+              <Label htmlFor="co2-warn">Warning Threshold</Label>
               <Input
                 id="co2-warn"
                 type="number"

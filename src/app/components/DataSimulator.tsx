@@ -71,6 +71,7 @@ export function DataSimulator() {
       'co2',
       'presence',
       'equipment',
+      'actuator',
     ];
     
     const changeType = changeTypes[Math.floor(Math.random() * changeTypes.length)];
@@ -94,6 +95,9 @@ export function DataSimulator() {
         break;
       case 'equipment':
         simulateEquipmentChange(room);
+        break;
+      case 'actuator':
+        simulateActuatorChange(room);
         break;
     }
   };
@@ -243,6 +247,37 @@ export function DataSimulator() {
       oldValue: oldStatus,
       newValue: newStatus,
       description: `${equipment.name} status changed from ${oldStatus} to ${newStatus}`,
+    });
+  };
+
+  const simulateActuatorChange = (room: LabRoom) => {
+    if (room.actuators.length === 0) return;
+    
+    const actuator = room.actuators[Math.floor(Math.random() * room.actuators.length)];
+    const statuses = ['on', 'off', 'auto'] as const;
+    const oldStatus = actuator.status;
+    const newStatus = statuses[Math.floor(Math.random() * statuses.length)];
+    
+    if (oldStatus === newStatus) {
+      return;
+    }
+
+    updateRoom(room.id, (targetRoom) => ({
+      ...targetRoom,
+      actuators: targetRoom.actuators.map((act) =>
+        act.id === actuator.id ? { ...act, status: newStatus } : act,
+      ),
+    }));
+
+    addLog({
+      roomId: room.id,
+      roomName: room.name,
+      labId: room.id,
+      changeType: 'equipment',
+      field: actuator.name,
+      oldValue: oldStatus,
+      newValue: newStatus,
+      description: `${actuator.name} (${actuator.type}) state changed from ${oldStatus} to ${newStatus}`,
     });
   };
 

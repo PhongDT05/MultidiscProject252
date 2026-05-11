@@ -21,7 +21,10 @@ import {
   Zap,
   Clock,
   Signal,
-  HardDrive
+  HardDrive,
+  Edit2,
+  Check,
+  X,
 } from 'lucide-react';
 
 // UC8 - System Health Monitoring & Diagnostics
@@ -31,6 +34,8 @@ export function DeviceHealth() {
   const [selectedRoom, setSelectedRoom] = useState<string>('all');
   const [selectedType, setSelectedType] = useState<string>('all');
   const [expandedDeviceId, setExpandedDeviceId] = useState<string | null>(null);
+  const [editingDeviceId, setEditingDeviceId] = useState<string | null>(null);
+  const [editingDeviceName, setEditingDeviceName] = useState('');
   const canToggleDevices = hasPermission('technician');
 
   const toggleDeviceEnabled = (deviceId: string, roomId: string) => {
@@ -47,6 +52,36 @@ export function DeviceHealth() {
         };
       }),
     }));
+  };
+
+  const startEditingDeviceName = (deviceId: string, currentName: string) => {
+    setEditingDeviceId(deviceId);
+    setEditingDeviceName(currentName);
+  };
+
+  const saveDeviceName = (deviceId: string, roomId: string) => {
+    if (!editingDeviceName.trim()) {
+      setEditingDeviceId(null);
+      setEditingDeviceName('');
+      return;
+    }
+
+    updateRoom(roomId, (room) => ({
+      ...room,
+      iotDevices: room.iotDevices.map((device) =>
+        device.id === deviceId
+          ? { ...device, name: editingDeviceName.trim() }
+          : device,
+      ),
+    }));
+
+    setEditingDeviceId(null);
+    setEditingDeviceName('');
+  };
+
+  const cancelEditingDeviceName = () => {
+    setEditingDeviceId(null);
+    setEditingDeviceName('');
   };
 
   // Get all devices across all rooms
@@ -286,8 +321,52 @@ export function DeviceHealth() {
                       {getDeviceIcon(device.type)}
                     </div>
                     <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-semibold text-slate-900">{device.name}</h3>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {editingDeviceId === device.id ? (
+                          <>
+                            <input
+                              type="text"
+                              value={editingDeviceName}
+                              onChange={(e) => setEditingDeviceName(e.target.value)}
+                              className="px-2 py-1 border border-blue-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              autoFocus
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  saveDeviceName(device.id, device.roomId);
+                                } else if (e.key === 'Escape') {
+                                  cancelEditingDeviceName();
+                                }
+                              }}
+                            />
+                            <button
+                              onClick={() => saveDeviceName(device.id, device.roomId)}
+                              className="p-1 text-green-600 hover:bg-green-50 rounded transition-colors"
+                              title="Save device name"
+                            >
+                              <Check className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={cancelEditingDeviceName}
+                              className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+                              title="Cancel editing"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <h3 className="font-semibold text-slate-900">{device.name}</h3>
+                            {canToggleDevices && (
+                              <button
+                                onClick={() => startEditingDeviceName(device.id, device.name)}
+                                className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded transition-colors"
+                                title="Edit device name"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </>
+                        )}
                         {getStatusIcon(device.status)}
                       </div>
                       <p className="text-sm text-slate-600 mt-1">

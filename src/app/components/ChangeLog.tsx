@@ -4,6 +4,7 @@ import { Card } from './ui/card';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { ScrollArea } from './ui/scroll-area';
+import { Input } from './ui/input';
 import { 
   Clock, 
   Activity, 
@@ -19,6 +20,7 @@ import {
   Minus,
   Filter,
   X,
+  Search,
 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
@@ -29,13 +31,23 @@ interface ChangeLogProps {
 }
 
 type EventFilter = 'all' | 'open-door' | 'fan' | 'cooling' | 'light' | 'alert';
+type DeviceCategory = 'all' | 'sensor' | 'equipment' | 'actuator';
 
 export function ChangeLog({ roomId, maxHeight = '600px', showFilters = true }: ChangeLogProps) {
   const { authorizedLogs, clearLogs, getAuthorizedLogsByRoom } = useDataLog();
   const [filterType, setFilterType] = useState<ChangeType | 'all'>('all');
   const [filterEvent, setFilterEvent] = useState<EventFilter>('all');
+  const [filterDevice, setFilterDevice] = useState<DeviceCategory>('all');
   const [filterRoom, setFilterRoom] = useState<string>('all');
-  const [timeWindow, setTimeWindow] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  
+  // Date/time filters
+  const now = new Date();
+  const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const [startDate, setStartDate] = useState<string>(oneDayAgo.toISOString().split('T')[0]);
+  const [startTime, setStartTime] = useState<string>('00:00');
+  const [endDate, setEndDate] = useState<string>(now.toISOString().split('T')[0]);
+  const [endTime, setEndTime] = useState<string>('23:59');
 
   const matchesEventFilter = (event: EventFilter, log: { changeType: ChangeType; field: string; description: string; oldValue: string | number; newValue: string | number }) => {
     if (event === 'all') return true;
@@ -60,9 +72,32 @@ export function ChangeLog({ roomId, maxHeight = '600px', showFilters = true }: C
     }
   };
 
+  // Map device categories to relevant change types
+  const getRelevantChangeTypes = (device: DeviceCategory): (ChangeType | 'all')[] => {
+    switch (device) {
+      case 'sensor':
+        return ['temperature', 'humidity', 'co2', 'presence'];
+      case 'equipment':
+        return ['equipment', 'status'];
+      case 'actuator':
+        return ['equipment', 'status', 'alert'];
+      case 'all':
+      default:
+        return ['all'];
+    }
+  };
+
   // Get filtered logs (using authorized logs only)
   const filteredLogs = useMemo(() => {
     let filtered = roomId ? getAuthorizedLogsByRoom(roomId) : authorizedLogs;
+
+    // Apply device filter first (which determines relevant change types)
+    if (filterDevice !== 'all') {
+      const relevantTypes = getRelevantChangeTypes(filterDevice);
+      if (relevantTypes[0] !== 'all') {
+        filtered = filtered.filter(log => relevantTypes.includes(log.changeType));
+      }
+    }
 
     if (filterType !== 'all') {
       filtered = filtered.filter(log => log.changeType === filterType);
@@ -76,17 +111,29 @@ export function ChangeLog({ roomId, maxHeight = '600px', showFilters = true }: C
       filtered = filtered.filter(log => log.roomId === filterRoom);
     }
 
-    if (timeWindow !== 'all') {
-      const now = Date.now();
-      const windowMinutes = Number.parseInt(timeWindow, 10);
-      if (Number.isFinite(windowMinutes) && windowMinutes > 0) {
-        const cutoff = now - windowMinutes * 60 * 1000;
-        filtered = filtered.filter((log) => log.timestamp.getTime() >= cutoff);
-      }
+    // Apply timestamp filter
+    try {
+      const startDateTime = new Date(`${startDate}T${startTime}:00`);
+      const endDateTime = new Date(`${endDate}T${endTime}:59`);
+      filtered = filtered.filter((log) => {
+        const logTime = log.timestamp.getTime();
+        return logTime >= startDateTime.getTime() && logTime <= endDateTime.getTime();
+      });
+    } catch (e) {
+      // Invalid date format, skip filtering
+    }
+
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter((log) => {
+        const searchText = `${log.field} ${log.description} ${log.oldValue} ${log.newValue} ${log.changeType} ${log.roomName || ''}`.toLowerCase();
+        return searchText.includes(query);
+      });
     }
 
     return filtered;
-  }, [authorizedLogs, roomId, filterType, filterEvent, filterRoom, timeWindow, getAuthorizedLogsByRoom]);
+  }, [authorizedLogs, roomId, filterType, filterEvent, filterDevice, filterRoom, searchQuery, startDate, startTime, endDate, endTime, getAuthorizedLogsByRoom]);
 
   // Get unique rooms from authorized logs only
   const uniqueRooms = useMemo(() => {
@@ -206,6 +253,24 @@ export function ChangeLog({ roomId, maxHeight = '600px', showFilters = true }: C
         {showFilters && (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1">
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Device</p>
+              <Select value={filterDevice} onValueChange={(value) => setFilterDevice(value as DeviceCategory)}>
+                <SelectTrigger className="h-9">
+                  <div className="flex items-center gap-2">
+                    <Filter className="w-4 h-4" />
+                    <SelectValue placeholder="Filter by device" />
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Devices</SelectItem>
+                  <SelectItem value="sensor">Sensors (Temperature, Humidity, CO₂, etc.)</SelectItem>
+                  <SelectItem value="equipment">Equipment</SelectItem>
+                  <SelectItem value="actuator">Actuators (HVAC, Fans, Lights)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
               <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Type</p>
               <Select value={filterType} onValueChange={(value) => setFilterType(value as ChangeType | 'all')}>
                 <SelectTrigger className="h-9">
@@ -265,28 +330,57 @@ export function ChangeLog({ roomId, maxHeight = '600px', showFilters = true }: C
               </div>
             )}
 
+            {/* Search Box - Full Width */}
+            <div className="sm:col-span-2 space-y-1">
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Search</p>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Input
+                  type="text"
+                  placeholder="Search logs by content..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10 h-9"
+                />
+              </div>
+            </div>
+
+            {/* Date/Time Range Filters */}
             <div className="space-y-1">
-              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Timestamp</p>
-              <Select value={timeWindow} onValueChange={setTimeWindow}>
-                <SelectTrigger className="h-9">
-                  <SelectValue placeholder="Filter by timestamp" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Time</SelectItem>
-                  <SelectItem value="5">Last 5 minutes</SelectItem>
-                  <SelectItem value="10">Last 10 minutes</SelectItem>
-                  <SelectItem value="20">Last 20 minutes</SelectItem>
-                  <SelectItem value="40">Last 40 minutes</SelectItem>
-                  <SelectItem value="60">Last 1 hour</SelectItem>
-                  <SelectItem value="120">Last 2 hours</SelectItem>
-                  <SelectItem value="180">Last 3 hours</SelectItem>
-                  <SelectItem value="240">Last 4 hours</SelectItem>
-                  <SelectItem value="300">Last 5 hours</SelectItem>
-                  <SelectItem value="360">Last 6 hours</SelectItem>
-                  <SelectItem value="480">Last 8 hours</SelectItem>
-                  <SelectItem value="720">Last 12 hours</SelectItem>
-                </SelectContent>
-              </Select>
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">From Date</p>
+              <Input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="h-9"
+              />
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">From Time</p>
+              <Input
+                type="time"
+                value={startTime}
+                onChange={(e) => setStartTime(e.target.value)}
+                className="h-9"
+              />
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">To Date</p>
+              <Input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="h-9"
+              />
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">To Time</p>
+              <Input
+                type="time"
+                value={endTime}
+                onChange={(e) => setEndTime(e.target.value)}
+                className="h-9"
+              />
             </div>
           </div>
         )}

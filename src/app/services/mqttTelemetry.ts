@@ -160,3 +160,54 @@ export function subscribeMqttTelemetry(handlers: SubscribeTelemetryHandlers): ()
     }
   };
 }
+
+export async function publishMqttCommand(topic: string, payload: string): Promise<void> {
+  if (!isEnabled || !brokerUrl) {
+    return; // silently skip if MQTT is disabled
+  }
+
+  try {
+    const mqttModule = await import('mqtt');
+    const connect = resolveMqttConnect(mqttModule);
+    if (!connect) {
+      console.warn('Failed to resolve MQTT connect function');
+      return;
+    }
+
+    const client = connect(brokerUrl, buildClientOptions());
+    
+    return new Promise<void>((resolve) => {
+      client.on('connect', () => {
+        client.publish(topic, payload, { qos: 1 }, (error?: Error | null) => {
+          if (error) {
+            console.warn(`MQTT publish error: ${error.message}`);
+          }
+          client.end(true);
+          resolve();
+        });
+      });
+
+      client.on('error', (error: unknown) => {
+        const message =
+          error && typeof error === 'object' && 'message' in error
+            ? String((error as { message?: unknown }).message ?? 'unknown error')
+            : 'unknown error';
+        console.warn(`MQTT client error: ${message}`);
+        client.end(true);
+        resolve();
+      });
+
+      // Timeout after 5 seconds
+      setTimeout(() => {
+        try {
+          client.end(true);
+        } catch {
+          // no-op
+        }
+        resolve();
+      }, 5000);
+    });
+  } catch (error) {
+    console.warn(`Failed to publish MQTT command: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
