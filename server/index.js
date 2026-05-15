@@ -2,6 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import { executeInTransaction, query, sql } from './db.js';
 import { mapLabRow, mapUserRow, roleCodeFromUi } from './mappers.js';
+import fs from 'fs/promises';
+import path from 'path';
 
 const app = express();
 const PORT = Number(process.env.API_PORT || 4000);
@@ -817,6 +819,35 @@ app.patch('/api/recommendations/:recommendationId/status', async (req, res) => {
   }
 
   res.json({ ok: true, id: recommendationId, status });
+});
+
+// Admin-only endpoint: run schema + demo seed from repository files.
+// Protect with `x-admin-secret` header matching `process.env.ADMIN_SECRET` (defaults to 'dev-secret' in dev).
+app.post('/api/admin/seed-demo', async (req, res) => {
+  const adminSecret = process.env.ADMIN_SECRET || 'dev-secret';
+  const provided = String(req.headers['x-admin-secret'] || req.query?.adminSecret || '');
+  if (provided !== adminSecret) {
+    return res.status(403).json({ error: 'admin secret required' });
+  }
+
+  try {
+    const files = ['001_schema.sql', '002_seed_demo.sql'];
+    const baseDir = path.join(process.cwd(), 'database', 'sqlserver');
+    for (const fileName of files) {
+      const fullPath = path.join(baseDir, fileName);
+      const content = await fs.readFile(fullPath, 'utf8');
+      // Split on lines that contain only GO (case-insensitive).
+      const batches = content.split(/^\s*GO\s*$/gim).map((s) => s.trim()).filter(Boolean);
+      for (const batch of batches) {
+        await query(batch);
+      }
+    }
+
+    return res.json({ ok: true, seeded: files });
+  } catch (error) {
+    console.error('Seed failed:', error);
+    return res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+  }
 });
 
 app.use((error, _req, res, _next) => {
