@@ -78,6 +78,8 @@ export function SystemConfig() {
   const [commandPayload, setCommandPayload] = useState('off');
   const [commandStatus, setCommandStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
   const [commandFeedback, setCommandFeedback] = useState('');
+  const [seedStatus, setSeedStatus] = useState<'idle' | 'seeding' | 'success' | 'error'>('idle');
+  const [seedFeedback, setSeedFeedback] = useState('');
 
   // Only admins can access this component
   if (!hasPermission('admin')) {
@@ -181,6 +183,21 @@ export function SystemConfig() {
     } catch (error) {
       setCommandStatus('error');
       setCommandFeedback(error instanceof Error ? error.message : 'Failed to publish MQTT command.');
+    }
+  };
+
+  const handleSeedDatabase = async () => {
+    setSeedStatus('seeding');
+    setSeedFeedback('');
+
+    try {
+      const result = await backendApi.seedDemo('dev-secret');
+      setSeedStatus('success');
+      setSeedFeedback(`Database seeded successfully. Files: ${result.seeded.join(', ')}`);
+      setTimeout(() => setSeedStatus('idle'), 3000);
+    } catch (error) {
+      setSeedStatus('error');
+      setSeedFeedback(error instanceof Error ? error.message : 'Failed to seed database.');
     }
   };
 
@@ -712,6 +729,36 @@ export function SystemConfig() {
                   max="60"
                 />
               </div>
+            </div>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-lg p-6">
+            <h3 className="font-semibold text-slate-900 mb-2">Database Management</h3>
+            <p className="text-sm text-slate-600 mb-4">
+              Seed the database with demo data including labs, equipment, IoT devices, and alerts.
+            </p>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+              <p className="text-xs text-blue-800">
+                This will populate all tables with application-aligned mock data including 6 labs, 16 equipment items, 19 IoT devices, and 13 actuators.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleSeedDatabase}
+                disabled={seedStatus === 'seeding'}
+                className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50"
+              >
+                {seedStatus === 'seeding' ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin inline-block mr-2" />
+                    Seeding...
+                  </>
+                ) : (
+                  'Seed Database'
+                )}
+              </button>
+              {seedStatus === 'success' && <span className="text-sm text-green-700">{seedFeedback}</span>}
+              {seedStatus === 'error' && <span className="text-sm text-red-700">{seedFeedback}</span>}
             </div>
           </div>
 

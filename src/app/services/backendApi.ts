@@ -179,4 +179,13 @@ export const backendApi = {
       }),
     });
   },
+
+  async seedDemo(adminSecret: string): Promise<{ ok: boolean; seeded: string[] }> {
+    return request<{ ok: boolean; seeded: string[] }>('/api/admin/seed-demo', {
+      method: 'POST',
+      headers: {
+        'x-admin-secret': adminSecret,
+      },
+    });
+  },
 };

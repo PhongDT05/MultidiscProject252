@@ -452,7 +452,7 @@ export function RoomDetail() {
               </div>
             ))}
           </div>
-        )}}
+        )}
       </div>
 
       {/* Current Metrics */}
